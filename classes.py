@@ -3,5 +3,3 @@ class pop:
         self.population=popn
 
         #self.poptype=  #type of pop
-
-
