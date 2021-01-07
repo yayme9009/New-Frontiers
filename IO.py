@@ -2,7 +2,7 @@ from classes import *
 
 #this file contains all the input and output functions
 
-def read_labGoods(filepath="goods.txt"):
+def read_labGoods(filepath="scenario\\goods.txt"):
     #this reads in a file that states the names of goods and labour types and returns two dictionaries that index a number to their name
     file=open(filepath)
     lines=file.readlines()
@@ -31,7 +31,7 @@ def read_labGoods(filepath="goods.txt"):
 
     return [labour,goods]
 
-def read_techniques(labourDict,goodsDict,filepath="techniques.txt"):
+def read_techniques(labourDict,goodsDict,filepath="scenario\\techniques.txt"):
     #reads a production technique file at filepath
     #first name, labourtype needed, then inputs,outputs,capital and size units all separated by empty lines "\n" and separated by 3 dashes
 
@@ -96,7 +96,7 @@ def read_techniques(labourDict,goodsDict,filepath="techniques.txt"):
     file.close()
     return techniques
 
-def read_needs(goodsDict,filepath="needs.txt"):
+def read_needs(goodsDict,filepath="scenario\\needs.txt"):
     #reads needs of pops
     #TODO: have different sets of needs for different pops
     needs=[0*len(goodsDict)]
@@ -108,7 +108,7 @@ def read_needs(goodsDict,filepath="needs.txt"):
 
     return needs
 
-def read_planets(labourDict,goodsDict,techniquesDict,needslist,filepath="planets.txt"):
+def read_planets(labourDict,goodsDict,techniquesDict,needslist,filepath="scenario\\planets.txt"):
     #reads in economic data for all planets
     #uses empty lines to seperate sections and triple dashes to separate planets
     #if/when solar systems are implemented split those by triple asterisks
@@ -146,13 +146,15 @@ def read_planets(labourDict,goodsDict,techniquesDict,needslist,filepath="planets
 
 
 
+
+
 #output functions
-def write_log_header(filepath="log.csv"):
+def write_log_header(filepath="data\\log.csv"):
     file=open(filepath,"w")
-    file.write("Turn #,Population,Needs Fulfillment,GDP,Money Supply,Rate of Profit,Rate of Surplus Value,Organic Composition of Capital\n")
+    file.write("Turn #,Population,Needs Fulfillment,GDP,Money Supply,Pop Savings,Industrial Savings,Rate of Profit,Rate of Surplus Value,Organic Composition of Capital\n")
     file.close()
 
-def write_to_log(turnnum,planets,filepath="log.csv"):
+def write_to_log(turnnum,planets,filepath="data\\log.csv"):
     file=open(filepath,"a")
 
     writeString=str(turnnum)+","
@@ -162,11 +164,14 @@ def write_to_log(turnnum,planets,filepath="log.csv"):
     money=0
     GDP=0
     companySize=0
+    popSavings=0
+    indSavings=0
     for planet in planets:
         for pop in planet.pops:
             population+=pop.population
             fulfill+=sum(pop.needsmet)/len(pop.needsmet)
             money+=pop.savings
+            popSavings+=pop.savings
             GDP+=pop.income
 
         fulfillavg+=fulfill/len(planet.pops)
@@ -176,10 +181,11 @@ def write_to_log(turnnum,planets,filepath="log.csv"):
         for ind in planet.industries:
             companySize+=ind.size
             money+=ind.savings
+            indSavings+=ind.savings
             GDP+=ind.income
 
     fulfillavg=fulfillavg/len(planets)
-    writeString+=str(population)+","+str(fulfillavg)+","+str(GDP)+","+str(money)+","
+    writeString+=str(population)+","+str(fulfillavg)+","+str(GDP)+","+str(money)+","+str(popSavings)+","+str(indSavings)+","
 
     #Marxian indicators
     ROP=0
@@ -197,6 +203,35 @@ def write_to_log(turnnum,planets,filepath="log.csv"):
     file.write(writeString)
 
     file.close()
+
+def write_goods_header(invlabDict,invgoodsDict,filePath="data\\goods.csv"):
+    #since there's only one planet no need for # of planet data here
+    writeString=""
+    file=open(filePath,"w")
+    for i in range(len(invlabDict)):
+        labour=invlabDict[i]
+        writeString+=labour+"Price,"+labour+"Demand,"+labour+"Supply,"
+    for i in range(len(invgoodsDict)):
+        good=invgoodsDict[i]
+        writeString+=good+"Price,"+good+"Demand,"+good+"Supply,"
+    file.write(writeString[:-1]+"\n")
+    file.close()
+
+def write_goods(planets,filePath="data\\goods.csv"):
+    #currently since there's one planet only one set of wages and prices are set
+    writeString=""
+    file=open(filePath,"a")
+
+    planet=planets[0]
+
+    for i in range(len(planets[0].wages)):
+        writeString+=str(planets[0].wages[i])+","+str(planets[0].labDemand[i])+","+str(planets[0].labSupply[i])+","
+    for i in range(len(planets[0].prices)):
+        writeString += str(planets[0].prices[i]) + "," + str(planets[0].demand[i]) + "," + str(planets[0].supply[i]) + ","
+
+    file.write(writeString[:-1]+"\n")
+    file.close()
+
 
 def split_with_quotes(string):
     #splits string at spaces except between quotation marks

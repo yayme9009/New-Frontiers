@@ -227,6 +227,7 @@ class industry:
         self.expansion = 0
         self.returned = 0
         self.maintenance = 0
+        #self.labour=0
 
         #uses capital goods and expansion goods to expand and such
         capDiff=self.caplvl-self.capital
@@ -334,7 +335,7 @@ class industry:
         add_stock(orderlist,[(x*self.capital+10*newCap)/100 for x in self.production.capitalUnit])
 
         #then buy goods for expansion
-        add_stock(orderlist,[x*newSize/10 for x in self.production.sizeUnit])
+        add_stock(orderlist,[(x*self.size+10*newSize)/100 for x in self.production.sizeUnit])
 
         orderlist=list_to_order(orderlist,self.id,False,False,True,1)
 

@@ -65,10 +65,11 @@ def market(planets,lenLab,lenGoods):
         #change prices up or down
         wagePriceChange=0.25 #how fast the prices change
         minWage=0.25 #price floor
+
         for j in range(lenLab):
-            if demandFill[j]>1: #oversupply
+            if demandFill[j]>1 or (demandFill[j]==-1): #oversupply or no demand, therefore -1
                 planets[i].wages[j]=max(minWage,planets[i].wages[j]-wagePriceChange)
-            else: #undersupply, also includes cases where supply is 0, which would give a -1
+            else: #undersupply
                 planets[i].wages[j]+=wagePriceChange
 
         planets[i].orders=[]
@@ -130,9 +131,9 @@ def market(planets,lenLab,lenGoods):
         priceChange=0.25
         minPrice=0.25
         for j in range(lenGoods):
-            if demandFill[j]>1: #oversupply
+            if demandFill[j]>1 or (demandFill[j]==-1): #oversupply
                 planets[i].prices[j]=max(minPrice,planets[i].prices[j]-priceChange)
-            else: #undersupply, also includes cases where supply is 0, which would give a -1
+            else: #undersupply
                 planets[i].prices[j]+=priceChange
 
         #now pops use the stock they've bought
