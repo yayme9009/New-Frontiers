@@ -1,32 +1,124 @@
+import math
+
+'''
+class market:
+    #market object that defines a market of various solar systems
+    def __init__(self):
+        self.systems=[] # list of systems in the market
+'''
+
+class planet:
+    #planet object
+    def __init__(self,coords,lenlab,lengoods):
+        #physical properties
+
+        self.location=coords #len 2 tuple that delinates where the celestial body is
+
+        '''
+        self.type=t #type of planet
+        self.size=s #size of planet as a scaling factor, limits avaliable space
+        self.temp=temperature #temperature of planet
+        self.water=w #how wet the planet is
+        '''
+
+        #economic properties
+        self.pops=[] #list of pops on the planet
+        self.industries=[] #list of planetary industries
+
+        #market lists
+        self.orders=[] #list of orders the planet has, essentially the planet's market
+        self.wages=[1]*lenlab
+        self.prices=[1]*lengoods
+        self.investment=[] #amount invested in planetary industries by social class
+
+        self.labDemand=[0]*lenlab
+        self.labSupply=[0]*lenlab #labour demand and supply lists for the planet
+        self.labMoney=[0]*lenlab #amount of money buyers are putting up for each type of labour
+
+        self.demand=[0]*lengoods
+        self.supply=[0]*lengoods #planetary supply and demand
+
+
 class pop:
-    def __init__(self,popln,s,need):
+    def __init__(self,i,popln,s,need):
         #the type of labour pops produce should be in a lookup table of some kind
+        self.id=i #id number that keeps track of the pop's database entry
 
         self.population=popln
         self.savings=s #liquid cash the pop has
         self.needs=need #list of list of goods the pops need
-        self.needsmet=[0*len(need)] #how fufilled pop needs are
-        self.bought=[]
+        self.needsmet=[0]*len(need) #how fufilled pop needs are
+        self.bought=[0]*len(need)
+
+        self.labourTier=0 #for now all labour is the same
 
         # self.poptype=  #type of pop
 
         #economic planning variables
 
-        self.income=s #amount of money made last turn
+        self.income=0 #amount of money made last turn
         self.expenses=0 #amount of money spent last turn
 
         #political variables
 
+    def labour(self):
+        #produces a labour selling order, labourTuple is the list of labour tiers and what good id they correspond to
+        return sellOrder(self.id,True, True, self.labourTier,self.population,0) #one labour unit produced per population
+
+    def use_stock(self):
+        #generates a fulfillment index based on what the pop has bought
+        self.needsmet=[0]*len(self.needsmet)
+        for i in range(len(self.needs)):
+            fulfill=0
+            goodsNeeded=0
+            for j in range(len(self.needs[i])):
+                if self.needs[i][j]==0:
+                    continue
+                goodsAmt=self.bought[j]
+                goodsUsed=min(goodsAmt,self.population*self.needs[i][j])
+                self.bought[j]-=goodsUsed
+                fulfill+=math.sqrt(goodsUsed/self.population*self.needs[i][j])
+                goodsNeeded+=1
+            self.needsmet[i]=(fulfill*1.0/goodsNeeded)
+
+        self.bought=[0]*len(self.bought) #clear storage item
+
+    def buy_orders(self,prices):
+        #function that decides what to do with the income the pop has
+
+        orders=[]
+        budget=self.savings
+
+        #first go through the life needs, currerntly pops spend all their money on needs
+
+        for i in range(len(self.needs)):
+            unitPrice=price_list(self.needs[i],prices)*self.population #how much full fulfillment of the need tier costs
+            multiplyFactor=min(1.0, budget/unitPrice)
+            buyList = [x*multiplyFactor*self.population for x in self.needs[i]]
+            orders+=list_to_order(buyList, self.id, False, True, True, 0)
+            budget-=unitPrice*multiplyFactor
+            if budget<0:
+                break
+
+        #print(budget,prices,unitPrice)
+
+        return orders
+
 
 class industry:
-    def __init__(self,n,prod,s1,s2,c): #prod is an object that describes a production process
+    def __init__(self,i,n,prod,s1,s2,c,lenlab,lengoods): #prod is an object that describes a production process
+        self.id=i #id number in database
 
         self.name=n
 
         self.production=prod #the production process this industry undergoes
         self.size=s1 #maximum thoroughput of this industry (how many units of self.production it can do)
-        self.savings=s2
+        self.savings=s2 #give enough starting funds to fund the max amount of production in the first round
         self.capital=c #amount of capital goods that enhance this industry's production
+
+        self.labStock=[0]*lenlab #stock of labour the industry has
+        self.stock=[0]*lengoods #will be filled with good ledger entries
+
         #should probably include some level of tech here
 
 
@@ -36,48 +128,465 @@ class industry:
 
         self.avgProd=0 #average productivity of the industry given capital and actual units of production
 
-        self.caplevel=c #desired level of capital in the industry
+        self.caplvl=c #desired level of capital in the industry
+        self.sizelvl=s1
 
-        self.prodPlanLvl=0 #desired level of production in the industry
-        self.prodActLvl=0 #actual level of production in the industry last turn
+        self.prodPlanLvl=self.size #desired level of production in the industry
+        self.prodActLvl=self.size #actual level of production in the industry last turn
 
-        self.income=s2
+        #set these planning variables ^ above to their max to start off with
+
+        self.income=0
+        self.labour=0
+        self.expansion=0 #funds devoted to expansion
+        self.returned=0 #funds devoted to paying down loans
+        self.maintenance=0 #funds devoted to maintaining capital, provides the c in c/v or OOC
         self.expenses=0 #expenses last turn
 
-    def production(self,inputUnits):
-        #returns the amount of output units produced from a number of input
-        #the function's derivative over units of production reaches a first maximum then asymptotically reaches 0
-        #the level of capital in the industry multiplicatively increases production more the less you're producing
-        self.avgProd=max(0,)
+    #for a typical market cycle, want to call labour market->.use()->.planning()->.sell()->.buy()->market transfers
+    #I put planning after production so that an industry can pop up with only starting capital
 
+    def goods_init(self):
+        #this initializes stocks for industries at game start
+        for i in range(len(self.production.inGoods)):
+            self.stock[self.production.inGoods[i]]+=self.production.inAmts[i]*self.size
+
+    def planning(self,labprices,prices):
+        #planning function that sets levels of production for the next turn
+        #should set prodplanlvl, caplvl and sizelvl
+        profitpercent=(self.income-self.expenses+self.expansion+self.returned)/(self.expenses-self.expansion-self.returned) #this measure is intended to be a measure of the profitability of the company, so expansion costs and debt repayments are excluded
+
+        budget=self.savings
+
+        unitCost=self.production.costs(labprices,prices)
+
+        #remember the following cost variables represent the cost of adding 10 of each
+        capitalCost = price_list(self.production.capitalUnit, prices) #maintaincost is 1/10th capitalCost
+        sizeCost=price_list(self.production.sizeUnit,prices)
+
+
+        canAfford=budget/unitCost
+
+        if profitpercent<0:
+            #if this production is losing money
+            self.prodPlanLvl=min(canAfford,self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
+            budget-=self.prodPlanLvl*unitCost
+
+        else:
+            if self.prodActLvl<self.size:
+                self.prodPlanLvl=min(self.size, self.prodActLvl*(1+max(1,profitpercent)), canAfford)
+                budget-=self.prodPlanLvl*unitCost
+
+        # maintenance of capital, each capital costs 1/10th the goods needed to build it
+        budget -= self.capital / 100 * capitalCost
+        budget -= self.size / 100 * sizeCost
+
+        #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
+        budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
+
+        if budget>0:
+            #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
+            #this is where adding space vs adding capital comes into play
+
+            #expansionPlan=budget/max(sizeCost,capitalCost)/2 #this variable shows the target amount of expansion this industry wants to do
+
+            if profitpercent<0:
+                #if profit is negative no increase in size will ever be profitable, dump resources into intensity
+                expansionPlan=budget/(2*capitalCost)
+                self.caplvl=self.capital+(expansionPlan*10)
+                self.sizelvl=self.size
+
+            else:
+                #else, mixture of capital intensity and size expansion
+                sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
+
+                expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)) #higher means more extensive vs intensive investment
+                #first sizeCapRatio measures how expensive it is to build capital instead of size
+                #then profit% modifies whether adding more space or intensity is profitable
+
+                expansionPlan=budget/((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))/2 #modify the amount of capacity you want to add
+
+                self.caplvl=(1-expandRatio)*expansionPlan*10+self.capital
+                self.sizelvl=(expandRatio)*expansionPlan*10+self.size
+
+        else:
+            #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
+            self.caplvl = self.capital
+            self.sizelvl = self.size
+
+            #TODO: loan flag here when banks implemented
+
+        #reset planning variables, important for future market stuff
+        self.income=0
+        self.expenses=0
+
+    def use(self,prices):
+        #main action function, where industry acts on all the goods it bought
+
+        #reset planning variables
+        self.expansion = 0
+        self.returned = 0
+        self.maintenance = 0
+
+        #uses capital goods and expansion goods to expand and such
+        capDiff=self.caplvl-self.capital
+        sizeDiff=self.sizelvl-self.size
+
+        capitalCost=price_list(self.production.capitalUnit,prices)
+        sizeCost=price_list(self.production.sizeUnit,prices)
+
+        #add to industry size and level of capital
+
+        goodChange=[0]*len(self.stock)
+        possibleCap=max(0,capDiff/10+self.capital/100) #possible units of capital goods that can be added
+
+        #if capDiff>0:
+        for i in range(len(self.production.capitalUnit)):
+            if self.production.capitalUnit[i]!=0:
+                possibleCap=min(possibleCap,self.production.capitalUnit[i])
+
+        goodChange=[possibleCap*x for x in self.production.capitalUnit]
+        remove_stock(self.stock,goodChange)
+
+        expandCapital=max(0,(possibleCap*10)-(self.capital/100))
+        self.capital+=expandCapital #add capital
+        self.expansion+=expandCapital*capitalCost
+        self.maintenance+=min(expandCapital, self.capital/100)*capitalCost
+
+        goodChange=[0]*len(self.stock)
+        possibleSize=max(0,sizeDiff/10+self.size/100)
+        for i in range(len(self.production.sizeUnit)):
+            if self.production.sizeUnit[i]!=0:
+                possibleSize=min(possibleSize,self.production.sizeUnit[i])
+
+        goodChange=[possibleSize*x for x in self.production.sizeUnit]
+        remove_stock(self.stock,goodChange)
+
+        expandSize=max(possibleSize*10-(self.size/100),0)
+
+        self.size+=expandSize #add size
+        self.expansion+=expandSize*sizeCost
+
+        #here the industry uses up it's items, call the production function
+        self.produce()
+
+        #if failed to get goods to maintain capital, start lowering capital
+        if expandCapital<(self.capital/100):
+            self.capital-=max(1,self.capital*(expandCapital/(self.capital/100))/4) #maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
+            self.capital=max(self.capital,0)
+
+        if expandSize<(self.size/100):
+            self.size -= max(1, self.size * (expandSize / (self.size / 100)) / 4)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
+            self.size = max(self.size, 0)
+
+
+    def produce(self):
+        #churn out however many units of output the industry decided upon making or can actually produce
+        #prodPlanLvl should already be set before this function is called
+        self.prodActLvl=min(self.prodPlanLvl,self.find_max_produce())
+
+        #first remove stock
+        #not sure if this is nessecary, since stock cleared every turn
+
+        self.stock=[0]*len(self.stock) #just get rid of all stock, maybe implement stock holdovers later on
+        self.labStock=[0]*len(self.labStock)
+
+        #here we add the products
+
+        #outunits is the production function, it's a parabola until a certain point where it levels off
+        x=self.prodActLvl #for clarity
+        if x>(self.size/2):
+            outUnits=2*x-(x**2/self.size)
+        else:
+            outUnits=x+self.size/4
+
+        outUnits+=self.capital*2
+
+        for i in range(len(self.production.outGoods)): #production
+            self.stock[self.production.outGoods[i]]=self.production.outAmts[i]*outUnits #not += since this wipes the original stock
+
+    def find_max_produce(self):
+        # returns the maximum units of output this industry can generate from it's current stock
+        canMake = min(self.size,self.labStock[self.production.labour])
+        for i in range(len(self.production.inGoods)):  # iterate through the input goods
+            canMake = min(self.stock[self.production.inGoods[i]]/ self.production.inAmts[i], canMake)
+        return canMake
+
+    def sell(self):
+        #returns a list of orders that sells the stuff the company has produced
+        orders=[]
+        for out in self.production.outGoods:
+            orders.append(sellOrder(self.id, False, False,out, self.stock[out],1))
+        return orders
+
+    def buy_labour(self):
+        #function that puts out buy orders for labour based on previously calculated planning variables
+        return buyOrder(self.id, True, False, self.production.labour, self.prodPlanLvl,1)
+
+    def buy_goods(self):
+        newCap=self.caplvl-self.capital
+        newSize=self.sizelvl-self.size
+
+        #function that puts out buy orders for goods that are needed for production and growth
+        orderlist=[0]*len(self.stock)
+
+        #first buy maintenance goods for capital and new expansion plans
+        add_stock(orderlist,[(x*self.capital+10*newCap)/100 for x in self.production.capitalUnit])
+
+        #then buy goods for expansion
+        add_stock(orderlist,[x*newSize/10 for x in self.production.sizeUnit])
+
+        orderlist=list_to_order(orderlist,self.id,False,False,True,1)
+
+        #finally buy goods for production
+        for i in range(len(self.production.inGoods)):
+            orderlist.append(buyOrder(self.id,False,False,self.production.inGoods[i],self.production.inAmts[i]*self.prodPlanLvl,1))
+
+        return orderlist
 
 class order:
     #transaction object used to keep track of goods and services on the market
-    def __init__(self,ID,buying,good):
+    def __init__(self,ID,lab,pop,buying,good,sec):
         self.actorID=ID #this is an ID object of the economic actor placing the order
+        self.isLabour=lab
+        self.isPop=pop #true if pop and false if industry
         self.isBuying=buying
         self.goodID=good
+        self.sector=sec #sector, 0 for pop, 1 for industry, 2 for government
 
 class buyOrder(order):
-    def __init__(self,ID,good,cash):
-        super(buyOrder, self).__init__(ID, True, good)
-        self.money=cash #amount of money the actor is paying
-        self.amount=0 #amount of goods bought
+    def __init__(self,ID,lab,pop,good,amt,sec):
+        super(buyOrder, self).__init__(ID,lab,pop, True, good,sec)
+        #self.money=cash #amount of money the actor is paying
+        self.amount=amt #amount of goods that the actor wants to buy
         self.moneyChange=0 #amount of money that changes hands
 
 class sellOrder(order):
-    def __init__(self,ID,good,amt):
-        super(sellOrder, self).__init__(ID, False, good)
+    def __init__(self,ID,lab,pop,good,amt,sec):
+        super(sellOrder, self).__init__(ID,lab,pop, False, good,sec)
         self.amount=amt #amount of stuff that actor is selling
-        self.money=0 #money gained from sale
+        #self.money=0 #money gained from sale
         self.moneyChange=0 #amount of money that changes hands, could use self.money but this retains consistency with buyOrder
 
 
 class technique:
     #defines a production technique industries use to produce goods
-    def __init__(self,inputGoods,inputAmts,outputGoods,outputAmts):
+    def __init__(self,lab,inputGoods,inputAmts,outputGoods,outputAmts,cap,size):
+        self.labour=lab #the labour type this technique needs
+
         self.inGoods=inputGoods #list of input goods in order
         self.inAmts=inputAmts #list of input amounts in order of self.inputGoods
         self.outGoods=outputGoods
         self.outAmts=outputAmts #same as inputs
 
+        self.capitalUnit=cap #how much increasing capital by 10 costs in goods
+        self.sizeUnit=size #how much increasing size by 10 costs in goods
+
+    def revenue(self,prices):
+        inputs=0
+        for i in range(len(self.inGoods)):
+            inputs+=self.inAmts[i]*prices[i]
+        return inputs
+
+    def costs(self,labprices,prices):
+        outputs=labprices[self.labour] #price of 1 unit of labour
+
+        for i in range(len(self.outGoods)):
+            outputs += self.outAmts[i] * prices[i]
+        return outputs
+
+    def profit(self,labprices,prices):
+        #returns the estimated profit of this technique based on prices
+        '''
+        inputs=0
+        outputs=0
+
+        for i in range(len(self.inGoods)):
+            inputs+=self.inAmts[i]*prices[i]
+        for i in range(len(self.outGoods)):
+            outputs += self.outAmts[i] * prices[i]
+        '''
+
+        return self.revenue(prices)-self.costs(labprices,prices)
+
+    def profit_percent(self,labprices,prices):
+        #returns the profit over the expenses percentage
+        '''
+        inputs = 0
+        outputs = 0
+
+        for i in range(len(self.inGoods)):
+            inputs += self.inAmts[i] * prices[i]
+        for i in range(len(self.outGoods)):
+            outputs += self.outAmts[i] * prices[i]
+        '''
+
+        return self.revenue(prices)-self.costs(labprices,prices)/self.costs(labprices,prices)
+
+#class ownership:
+    #ownership object that determines where the dividends of this the industry go
+    #def __init__(self):
+        
+
+
+
+
+
+
+
+
+
+class stock:
+    #data object that represents the stock of goods a company has
+    def __init__(self):
+        self.entries=[] #list of things it has
+
+    def add_good(self,goodId,amt):
+        #adds goods to stock
+        index=find_first_index(self.entries,goodId)
+        if index==-1:
+            self.entries.append([goodId,amt])
+        else:
+            self.entries[index][1]+=amt
+
+    def remove_good(self,goodId,amt):
+        #wrapper for add_good
+        self.add_good(goodId,-1*amt)
+
+    def get_amt(self,goodID):
+        #returns the amount of good represented by goodID
+        index=find_first_index(self.entries,goodID)
+        if index==-1:
+            return 0 #no such entry
+        return self.entries[index][1]
+
+    #utility functions
+    def to_list(self,goodslen):
+        #turns this stock into a list
+        returnList=[]
+        for i in range(len(goodslen)):
+            returnList.append(self.get_amt(i))
+        return returnList
+
+    def empty(self):
+        self.entries=[]
+
+
+class database:
+    #database class that keeps track of ids and such
+    def __init__(self):
+        self.indices=[]
+        self.entries=[]
+
+    def find_object(self,id):
+        #returns object with given ID
+        return self.entries[self.indices.index(id)]
+
+    def next_id(self):
+        #finds the next available id in the database
+        if not self.indices:
+            return 0
+        else:
+            index = -1
+
+            # finds first available id
+            for i in range(len(self.indices)):
+                # i/indices[i] should be 1 (the same) if the id is filled
+                if i / self.indices[i] != 1:
+                    index = i
+                    break
+            if index != -1:  # found id gap
+                return index
+            else:  # else append to end
+                return len(self.indices)
+
+
+    def add_object(self,obj):
+        #adds an object to the database
+        if len(self.indices)==0:
+            self.indices.append(0)
+            self.entries.append(obj)
+        else:
+            index=-1
+
+            #finds first available id
+            for i in range(len(self.indices)):
+                #i/indices[i] should be 1 (the same) if the id is filled
+                if i/self.indices[i]!=1:
+                    index=i
+                    break
+            if index!=-1: #found id gap
+                self.indices.insert(index,self.indices[index-1]+1) #inserts lowest available id
+                self.entries.insert(index,obj)
+            else: #else append to end
+                self.indices.append(len(self.indices))
+                self.entries.append(obj)
+
+    def delete_object(self,index):
+        #delete object from database
+        self.entries.pop(self.indices.index(index))
+        self.indices.remove(index)
+
+'''
+class stock:
+    def __init__(self):
+        self.entries=[] #stock entries
+    def add_stock(self,g,amount):
+        
+
+class entry:
+    #good stock entry, only has two attributes
+    def __init__(self,g,amount):
+        self.good=g #good name
+        self.amt=amount
+'''
+
+def find_first_index(list, num):
+    #takes a 2D list and a number and returns the first index such that list[index][0]=num, or -1 if not there
+    if not list:
+        return -1
+
+    index=-1
+    for i in range(len(list)):
+        if list[index][0]==num:
+            index=i
+            break
+    return index
+
+def price_list(list,prices):
+    #takes a list of goods and returns the price of them all
+    price=0
+    for i in range(len(list)):
+        price+=list[i]*prices[i]
+    return price
+
+def list_to_order(list, id, lab, pop, buy,sec):
+    #converts a list of goods into the appropriate list of orders
+    orders=[]
+    if buy:
+        for i in range(len(list)):
+            if list[i]!=0:
+                orders.append(buyOrder(id,lab,pop,i,list[i],sec))
+    else:
+        for i in range(len(list)):
+            if list[i]!=0:
+                orders.append(sellOrder(id,lab,pop,i,list[i],sec))
+    return orders
+
+def add_stock(stock,list):
+    #takes two list stocks of equal length and adds
+    for i in range(len(stock)):
+        stock[i]+=list[i]
+
+def remove_stock(stock,list):
+    list2=[-1*x for x in list]
+    add_stock(stock,list2)
+
+def bound(bounds, value):
+    #given a (lower, upper) bound tuple in bounds and a value, returns either the value or the appropriate upper or lower bound
+    #eg bound((1,3),2) will return 2 but bound((1,3),4) will return 4
+    if value>bounds[1]:
+        return bounds[1]
+    elif value<bounds[0]:
+        return bounds[0]
+    return value
