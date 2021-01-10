@@ -8,7 +8,8 @@ from IO import *
 [labDict,goodsDict]=read_labGoods()
 techniques=read_techniques(labDict,goodsDict)
 needs=read_needs(goodsDict)
-planets=read_planets(labDict,goodsDict,techniques,[[needs]])
+poptypes=read_poptypes()
+planets=read_planets(labDict,goodsDict,techniques,poptypes,[[needs]])
 
 write_log_header()
 write_goods_header({v: k for k, v in labDict.items()},{v: k for k, v in goodsDict.items()})
@@ -20,7 +21,10 @@ for planet in planets:
 
 
 for i in range(250):
-    market(planets,len(labDict),len(goodsDict))
+    market(planets,techniques,len(labDict),len(goodsDict))
     #print(planets[0].industries[0].savings,planets[0].industries[1].savings,planets[0].industries[2].savings)
+    #print(planets[0].industries[0].size, planets[0].industries[1].size, planets[0].industries[2].size)
+    #print(planets[0].industries[0].capital, planets[0].industries[1].capital, planets[0].industries[2].capital)
+    print(i,len(planets[0].industries))
     write_to_log(i,planets)
     write_goods(planets)

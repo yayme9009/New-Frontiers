@@ -98,6 +98,7 @@ def read_techniques(labourDict,goodsDict,filepath="scenario\\techniques.txt"):
 
 def read_needs(goodsDict,filepath="scenario\\needs.txt"):
     #reads needs of pops
+    #TODO: have a hierarchy of pop needs
     #TODO: have different sets of needs for different pops
     needs=[0*len(goodsDict)]
     file=open(filepath)
@@ -108,7 +109,16 @@ def read_needs(goodsDict,filepath="scenario\\needs.txt"):
 
     return needs
 
-def read_planets(labourDict,goodsDict,techniquesDict,needslist,filepath="scenario\\planets.txt"):
+def read_poptypes(filepath="scenario\\poptypes.txt"):
+    #read types of pops
+    file=open(filepath)
+    lines=file.readlines()
+    returnDict={}
+    for i in range(len(lines)):
+        returnDict[lines[i][:-1]]=i
+    return returnDict
+
+def read_planets(labourDict,goodsDict,techniquesDict,popTypesDict,needslist,filepath="scenario\\planets.txt"):
     #reads in economic data for all planets
     #uses empty lines to seperate sections and triple dashes to separate planets
     #if/when solar systems are implemented split those by triple asterisks
@@ -117,17 +127,26 @@ def read_planets(labourDict,goodsDict,techniquesDict,needslist,filepath="scenari
     lines=file.readlines()
 
     stage=0
-    planets=[planet((0,0),len(labourDict),len(goodsDict))]
+    planets=[]
     planetCounter=0
 
     for line in lines:
         if (line!="\n")and(line!="***\n"):
             if stage==0:
+                #ownership data about the planet's industries
+                params=line.split(",")
+                own=ownership(len(popTypesDict))
+                own.pops=[float(x) for x in params[:len(popTypesDict)]]
+                #TODO: when implementing companies have something here
+                #maybe separate by semicolon
+                #TODO: when implementing governments put something here
+                planets.append(planet((0,0),own,len(labourDict),len(goodsDict)))
+            elif stage==1:
                 #currently this means pop information
                 #right now only size and savings needed, separated by spaces
                 params=line.split(",")
-                planets[planetCounter].pops.append(pop(len(planets[planetCounter].pops)-1,int(params[0]),float(params[1]),needslist[0])) #currently has only one set of needs, fix later
-            elif stage==1:
+                planets[planetCounter].pops.append(pop(len(planets[planetCounter].pops)-1,popTypesDict[params[0]],int(params[1]),float(params[2]),needslist[0])) #currently has only one set of needs, fix later
+            elif stage==2:
                 #industries
                 #parameters: name, name of production technique, size, savings, capital level
                 params=line.split(",")
@@ -137,7 +156,7 @@ def read_planets(labourDict,goodsDict,techniquesDict,needslist,filepath="scenari
         else:
             #new planet
             planetCounter+=1
-            planets.append(planet((0,0),len(labourDict),len(goodsDict)))
+            #planets.append(planet((0,0),len(labourDict),len(goodsDict),len(popTypesDict)))
             stage=0
 
     file.close()
@@ -167,12 +186,14 @@ def write_to_log(turnnum,planets,filepath="data\\log.csv"):
     popSavings=0
     indSavings=0
     for planet in planets:
+        money+=planet.investment
+
         for pop in planet.pops:
             population+=pop.population
             fulfill+=sum(pop.needsmet)/len(pop.needsmet)
             money+=pop.savings
             popSavings+=pop.savings
-            GDP+=pop.income
+            GDP+=pop.income-pop.dividend #avoid double-counting
 
         fulfillavg+=fulfill/len(planet.pops)
         #GDP+=price_list(planet.supply,planet.prices)
@@ -193,10 +214,9 @@ def write_to_log(turnnum,planets,filepath="data\\log.csv"):
     ROSV=0
     for planet in planets:
         for ind in planet.industries:
-            surplus=(ind.income-(ind.maintenance-ind.labour))
-            ROP+=(surplus)/(ind.maintenance+ind.labour)*ind.size/companySize
-            OOC+=(ind.maintenance/ind.labour)*ind.size/companySize
-            ROSV+=(surplus/(surplus+ind.labour))*ind.size/companySize
+            ROP+=ind.ROP*ind.size/companySize
+            OOC+=ind.OOC*ind.size/companySize
+            ROSV+=ind.ROSV*ind.size/companySize
 
     writeString+=str(ROP)+","+str(ROSV)+","+str(OOC)+"\n"
 

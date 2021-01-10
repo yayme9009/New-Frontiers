@@ -3,7 +3,7 @@
 #for a typical market cycle, want to call labour market->.use()->.planning()->.sell()->.buy()->market transfers
 #don't forget to update planning variables
 
-def market(planets,lenLab,lenGoods):
+def market(planets,techDict,lenLab,lenGoods):
     #this function iterates through planets and generates a list of orders that will go into the market
     #this function deals with the first turn of the market: the production cycle
 
@@ -63,8 +63,8 @@ def market(planets,lenLab,lenGoods):
 
 
         #change prices up or down
-        wagePriceChange=0.25 #how fast the prices change
-        minWage=0.25 #price floor
+        wagePriceChange=0.05 #how fast the prices change
+        minWage=0.05 #price floor
 
         for j in range(lenLab):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply or no demand, therefore -1
@@ -73,6 +73,11 @@ def market(planets,lenLab,lenGoods):
                 planets[i].wages[j]+=wagePriceChange
 
         planets[i].orders=[]
+
+        #here industries give out dividends and new industries created
+        planets[i].give_dividends()
+        planets[i].use_investment(techDict)
+
 
         #production phase, uses stock of goods to generate goods for sale & prep for next phase
         for j in range(len(planets[i].industries)):
@@ -128,8 +133,8 @@ def market(planets,lenLab,lenGoods):
                         planets[i].industries[order.actorID].savings -= exp
                         planets[i].industries[order.actorID].expenses += exp
 
-        priceChange=0.25
-        minPrice=0.25
+        priceChange=0.05
+        minPrice=0.05
         for j in range(lenGoods):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply
                 planets[i].prices[j]=max(minPrice,planets[i].prices[j]-priceChange)
@@ -140,6 +145,8 @@ def market(planets,lenLab,lenGoods):
         for j in range(len(planets[i].pops)):
             planets[i].pops[j].use_stock()
 
+        #here pops invest in planet
+        planets[i].get_investment()
 
 
 def demand_supply(orders,lenGoods):
