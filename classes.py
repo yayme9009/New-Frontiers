@@ -197,12 +197,12 @@ class pop:
         #first go through the life needs, currerntly pops spend all their money on needs
 
         for i in range(len(self.needs)):
-            unitPrice=price_list(self.needs[i],prices)*self.population #how much full fulfillment of the need tier costs
-            multiplyFactor=min(1.0, budget/unitPrice)
+            unitPrice=price_list(self.needs[i],prices) #how much one unit (1 population) of needs costs
+            multiplyFactor=min(1.0, budget/(unitPrice*self.population)) #proportion of needs pop can fulfill with this budget
             buyList = [x*multiplyFactor*self.population for x in self.needs[i]]
             orders+=list_to_order(buyList, self.id, False, True, True, 0)
-            budget-=unitPrice*multiplyFactor
-            if budget<0:
+            budget-=unitPrice*multiplyFactor*self.population
+            if budget<=0:
                 break
 
         #print(budget,prices,unitPrice)
@@ -303,8 +303,8 @@ class industry:
 
             #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
             keep=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
-            if keep<0:
-                print("\t",keep)
+            #if keep<0:
+            #    print("\t",keep)
             budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
 
             if budget>0:
@@ -445,7 +445,7 @@ class industry:
 
         #outUnits+=self.capital
 
-        outUnits*=1+((self.capital)/self.size)
+        outUnits*=1+(math.log(self.capital/self.size+1,2)) #probably should modify the horizontal asymptote with tech
 
         for i in range(len(self.production.outGoods)): #production
             self.stock[self.production.outGoods[i]]=self.production.outAmts[i]*outUnits #not += since this wipes the original stock
@@ -592,7 +592,6 @@ class technique:
         for i in range(len(self.outGoods)):
             outputs += self.outAmts[i] * prices[i]
         '''
-
         return (self.revenue(prices)-self.costs(labprices,prices))/self.costs(labprices,prices)
 
 class ownership:

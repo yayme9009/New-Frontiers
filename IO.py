@@ -100,7 +100,7 @@ def read_needs(goodsDict,filepath="scenario\\needs.txt"):
     #reads needs of pops
     #TODO: have a hierarchy of pop needs
     #TODO: have different sets of needs for different pops
-    needs=[0*len(goodsDict)]
+    needs=[0]*len(goodsDict)
     file=open(filepath)
     lines=file.readlines()
     for line in lines:
@@ -145,7 +145,7 @@ def read_planets(labourDict,goodsDict,techniquesDict,popTypesDict,needslist,file
                 #currently this means pop information
                 #right now only size and savings needed, separated by spaces
                 params=line.split(",")
-                planets[planetCounter].pops.append(pop(len(planets[planetCounter].pops)-1,popTypesDict[params[0]],int(params[1]),float(params[2]),needslist[0])) #currently has only one set of needs, fix later
+                planets[planetCounter].pops.append(pop(len(planets[planetCounter].pops),popTypesDict[params[0]],int(params[1]),float(params[2]),needslist[0])) #currently has only one set of needs, fix later
             elif stage==2:
                 #industries
                 #parameters: name, name of production technique, size, savings, capital level

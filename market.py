@@ -1,4 +1,5 @@
 #from classes import *
+from math import pow,e
 
 #for a typical market cycle, want to call labour market->.use()->.planning()->.sell()->.buy()->market transfers
 #don't forget to update planning variables
@@ -66,14 +67,27 @@ def market(planets,techDict,lenLab,lenGoods):
 
 
         #change prices up or down
-        wagePriceChange=0.05 #how fast the prices change
-        minWage=0.05 #price floor
+        maxWagePriceChange=1 #how fast the prices change
+        minWage=0.0 #price floor
 
         for j in range(lenLab):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply or no demand, therefore -1
-                planets[i].wages[j]=max(minWage,planets[i].wages[j]-wagePriceChange)
+                #max %age change in price 10%
+                if demandFill[j]==-1:
+                    planets[i].wages[j]-=planets[i].wages[j]*0.1
+
+                pricePercentChange=(0.1)/(1+pow(e,-(demandFill[j]-1)/2))
+
+                print(pricePercentChange)
+
+                planets[i].wages[j]=max(minWage,planets[i].wages[j]*(1-pricePercentChange))
             else: #undersupply
-                planets[i].wages[j]+=wagePriceChange
+                if demandFill[j]==0: #no supply
+                    planets[i].wages[j]+=min(planets[i].wages[j]*0.1,maxWagePriceChange)
+                else:
+                    pricePercentChange=(0.1)/(1+pow(e,-(1/demandFill[j]-1)/2))
+
+                    planets[i].wages[j]+=min(planets[i].wages[j]*pricePercentChange,maxWagePriceChange)
 
         planets[i].orders=[]
 
@@ -122,6 +136,11 @@ def market(planets,techDict,lenLab,lenGoods):
                         planets[i].pops[order.actorID].bought[order.goodID] += goodsBought
 
                         planets[i].pops[order.actorID].savings -= planets[i].prices[order.goodID] * goodsBought
+
+                        if planets[i].pops[order.actorID].savings<goodsBought*planets[i].prices[order.goodID]:
+
+                            print("\t",planets[i].pops[order.actorID].savings,order.amount*planets[i].prices[order.goodID],order.actorID)
+
                 elif order.sector == 1:  # industry
                     if not order.isBuying:
                         goodsSold=order.amount * min(1, 1 / demandFill[order.goodID])
@@ -141,13 +160,21 @@ def market(planets,techDict,lenLab,lenGoods):
                         if planets[i].industries[order.actorID].savings<0:
                             print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
 
-        priceChange=0.05
-        minPrice=0.05
+        maxPriceChange=1
+        minPrice=0.0
         for j in range(lenGoods):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply
-                planets[i].prices[j]=max(minPrice,planets[i].prices[j]-priceChange)
+                if demandFill[j]==-1:
+                    planets[i].prices[j]*=0.9 #cut by 10%
+                else:
+                    pricePercentChange = (0.1) / (1 + pow(e, -(demandFill[j] - 1) / 2))
+                    planets[i].prices[j]=max(minPrice,planets[i].prices[j]*(1-pricePercentChange))
             else: #undersupply
-                planets[i].prices[j]+=priceChange
+                if demandFill[j]==0: #no supply
+                    planets[i].prices[j]+=min(maxPriceChange,planets[i].prices[j]*0.1)
+                else:
+                    pricePercentChange = (0.1) / (1 + pow(e, -(1 / demandFill[j] - 1) / 2))
+                    planets[i].prices[j]+=min(maxPriceChange,planets[i].prices[j]*pricePercentChange)
 
         #now pops use the stock they've bought
         for j in range(len(planets[i].pops)):
