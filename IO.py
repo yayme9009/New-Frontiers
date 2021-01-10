@@ -70,11 +70,11 @@ def read_techniques(labourDict,goodsDict,filepath="scenario\\techniques.txt"):
             elif stage==4:
                 #capital unit
                 halves=line[:-1].split(":")
-                capital[goodsDict[halves[0].strip()]]=int(halves[1].strip())
+                capital[goodsDict[halves[0].strip()]]=float(halves[1].strip())
             elif stage==5:
                 #size unit
                 halves = line[:-1].split(":")
-                size[goodsDict[halves[0].strip()]] = int(halves[1].strip())
+                size[goodsDict[halves[0].strip()]] = float(halves[1].strip())
         elif line=="\n":
             stage+=1 #new stage
         else:

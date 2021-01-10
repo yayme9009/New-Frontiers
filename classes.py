@@ -70,7 +70,10 @@ class planet:
 
         #if need to speed up this function, can get rid of negative value factories
 
-        startCap=sum(self.prices)/len(self.prices)*1000 #average cost of goods times 500
+        #average costs of techniques used to determine starting funds
+        costs=[tech.costs(self.wages,self.prices) for tech in techsSorted]
+
+        startCap=sum(costs)/len(costs)*500 #average cost of goods times 500
         numInds=math.floor(self.investment/startCap) #max factories being made
 
         #the Jefferson method is used to determine which productions they use
@@ -128,7 +131,7 @@ class planet:
         #purges all the dead industries from the roll
         deadIndKeys=[]
         for key,ind in self.industries.items():
-            if (ind.savings<0.000001)or(ind.size<=0):
+            if (ind.savings<0.000001):
                 deadIndKeys.append(key)
         for key in deadIndKeys:
             self.investment+=self.industries[key].savings
@@ -289,16 +292,19 @@ class industry:
 
         if budget>0:
 
+            random.seed()
+            randomProdFactor=random.uniform(0.95,1.05) #range of 10 percentage points, modifies level set
+
             canAfford=budget/unitCost
 
             if profitpercent<0:
                 #if this production is losing money
-                self.prodPlanLvl=min(canAfford,self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
+                self.prodPlanLvl=min(canAfford,randomProdFactor*self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
 
                 budget-=self.prodPlanLvl*unitCost
 
             else:
-                self.prodPlanLvl=min(self.size, self.prodActLvl*(1+max(1,profitpercent)), canAfford)
+                self.prodPlanLvl=min(self.size, randomProdFactor*self.prodActLvl*(1+max(1,profitpercent)), canAfford)
                 budget-=self.prodPlanLvl*unitCost
 
             #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
@@ -420,12 +426,15 @@ class industry:
 
         if expandSize<(self.size/100):
             self.size -= max(1, self.size * (expandSize / (self.size / 100)) / 4)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
-        self.size = max(self.size, 0)
+        self.size = max(self.size, 0.1)
 
 
     def produce(self):
         #churn out however many units of output the industry decided upon making or can actually produce
         #prodPlanLvl should already be set before this function is called
+        random.seed()
+        randOutFactor=random.uniform(0.95,1.05) #a little bit of randomness here to differentiate the companies, avoid collapse all at once
+
         self.prodActLvl=min(self.prodPlanLvl,self.find_max_produce())
 
         #first remove stock
@@ -446,6 +455,8 @@ class industry:
         #outUnits+=self.capital
 
         outUnits*=1+(math.log(self.capital/self.size+1,2)) #probably should modify the horizontal asymptote with tech
+
+        outUnits*=randOutFactor
 
         for i in range(len(self.production.outGoods)): #production
             self.stock[self.production.outGoods[i]]=self.production.outAmts[i]*outUnits #not += since this wipes the original stock
