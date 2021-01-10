@@ -50,7 +50,7 @@ class planet:
         #do this before pops sell labour but after pops buy goods (beginning of cycle say)
         for i in range(len(self.pops)):
             needsCost=sum([price_list(need, self.prices) for need in self.pops[i].needs]) #this assumes pops all have the same needs
-            if self.pops[i].savings>(10*needsCost): #buffer
+            if self.pops[i].savings>(10*needsCost*self.pops[i].population): #buffer
                 invest=self.pops[i].savings-(10*needsCost*self.pops[i].population)
                 self.investment+=invest
                 self.ownership.pops[self.pops[i].poptype]+=invest
@@ -85,7 +85,7 @@ class planet:
         for i in range(len(numIndList)):
             for j in range(numIndList[i]):
                 newid=generate_id()
-                self.industries[newid](industry(newid,"A",techsSorted[i],1,startCap,0,len(self.wages),len(self.prices))) #industry starts with 1 size free of charge
+                self.industries[newid]=industry(newid,"A",techsSorted[i],1,startCap,0,len(self.wages),len(self.prices)) #industry starts with 1 size free of charge
 
         self.investment-=numInds*startCap
 
@@ -96,7 +96,7 @@ class planet:
 
         #collecting dividends
         self.dividend=0
-        for ind in self.industries:
+        for key,ind in self.industries.items():
             operatingCosts=ind.production.costs(self.wages,self.prices)*ind.size
             if ind.savings>(5*operatingCosts):
                 #excess of money, take off the top as hard cap
@@ -120,6 +120,15 @@ class planet:
 
         #reset dividends
         self.dividend=0
+
+    def purge(self):
+        #purges all the dead industries from the roll
+        deadIndKeys=[]
+        for key,ind in self.industries.items():
+            if ind.savings<0.000001:
+                deadIndKeys.append(key)
+        for key in deadIndKeys:
+            del self.industries[key]
 
 
 class pop:
@@ -166,10 +175,8 @@ class pop:
                     continue
                 goodsAmt=self.bought[j]
                 goodsUsed=min(goodsAmt,self.population*self.needs[i][j])
-                self.bought[j]-=goodsUsed
 
-                #if goodsUsed<0:
-                #    print(goodsUsed,goodsAmt)
+                self.bought[j]-=goodsUsed
 
                 fulfill+=math.sqrt(goodsUsed/self.population*self.needs[i][j])
                 goodsNeeded+=1
@@ -255,6 +262,9 @@ class industry:
         #should set prodplanlvl, caplvl and sizelvl
         profitpercent=(self.income-self.expenses+self.expansion+self.returned)/(self.expenses-self.expansion-self.returned) #this measure is intended to be a measure of the profitability of the company, so expansion costs and debt repayments are excluded
 
+        if self.savings<0:
+            print("a",self.savings)
+
         budget=self.savings
 
         unitCost=self.production.costs(labprices,prices)
@@ -263,57 +273,65 @@ class industry:
         capitalCost = price_list(self.production.capitalUnit, prices) #maintaincost is 1/10th capitalCost
         sizeCost=price_list(self.production.sizeUnit,prices)
 
-
-        canAfford=budget/unitCost
-
-        if profitpercent<0:
-            #if this production is losing money
-            self.prodPlanLvl=min(canAfford,self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
-            budget-=self.prodPlanLvl*unitCost
-
-        else:
-            if self.prodActLvl<self.size:
-                self.prodPlanLvl=min(self.size, self.prodActLvl*(1+max(1,profitpercent)), canAfford)
-                budget-=self.prodPlanLvl*unitCost
-
         # maintenance of capital, each capital costs 1/10th the goods needed to build it
         budget -= self.capital / 100 * capitalCost
         budget -= self.size / 100 * sizeCost
 
-        #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
-        budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
-
         if budget>0:
-            #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
-            #this is where adding space vs adding capital comes into play
 
-            #expansionPlan=budget/max(sizeCost,capitalCost)/2 #this variable shows the target amount of expansion this industry wants to do
+            canAfford=budget/unitCost
 
             if profitpercent<0:
-                #if profit is negative no increase in size will ever be profitable, dump resources into intensity
-                expansionPlan=budget/(2*capitalCost)
-                self.caplvl=self.capital+(expansionPlan*10)
-                self.sizelvl=self.size
+                #if this production is losing money
+                self.prodPlanLvl=min(canAfford,self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
+
+                if self.prodPlanLvl<0:
+                    print(self.prodPlanLvl,(1+max(-0.9,(profitpercent))))
+
+                budget-=self.prodPlanLvl*unitCost
 
             else:
-                #else, mixture of capital intensity and size expansion
-                sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
+                self.prodPlanLvl=min(self.size, self.prodActLvl*(1+max(1,profitpercent)), canAfford)
+                budget-=self.prodPlanLvl*unitCost
 
-                expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)) #higher means more extensive vs intensive investment
-                #first sizeCapRatio measures how expensive it is to build capital instead of size
-                #then profit% modifies whether adding more space or intensity is profitable
+            #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
+            budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
 
-                expansionPlan=budget/((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))/2 #modify the amount of capacity you want to add
+            if budget>0:
+                #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
+                #this is where adding space vs adding capital comes into play
 
-                self.caplvl=(1-expandRatio)*expansionPlan*10+self.capital
-                self.sizelvl=(expandRatio)*expansionPlan*10+self.size
+                #expansionPlan=budget/max(sizeCost,capitalCost)/2 #this variable shows the target amount of expansion this industry wants to do
+
+                if profitpercent<0:
+                    #if profit is negative no increase in size will ever be profitable, dump resources into intensity
+                    expansionPlan=budget/(2*capitalCost)
+                    self.caplvl=self.capital+(expansionPlan*10)
+                    self.sizelvl=self.size
+
+                else:
+                    #else, mixture of capital intensity and size expansion
+                    sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
+
+                    expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)) #higher means more extensive vs intensive investment
+                    #first sizeCapRatio measures how expensive it is to build capital instead of size
+                    #then profit% modifies whether adding more space or intensity is profitable
+
+                    expansionPlan=budget/((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))/2 #modify the amount of capacity you want to add
+
+                    self.caplvl=(1-expandRatio)*expansionPlan*10+self.capital
+                    self.sizelvl=(expandRatio)*expansionPlan*10+self.size
+
+            else:
+                #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
+                self.caplvl = self.capital
+                self.sizelvl = self.size
+
+                #TODO: loan flag here when banks implemented
 
         else:
-            #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
-            self.caplvl = self.capital
-            self.sizelvl = self.size
-
-            #TODO: loan flag here when banks implemented
+            self.caplvl=self.capital
+            self.sizelvl=self.size
 
         #calculate Marxian indicators
         surplus=(self.income-self.maintenance-self.labour)
@@ -387,11 +405,11 @@ class industry:
         #if failed to get goods to maintain capital, start lowering capital
         if expandCapital<(self.capital/100):
             self.capital-=max(1,self.capital*(expandCapital/(self.capital/100))/4) #maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
-            self.capital=max(self.capital,0)
+        self.capital=max(self.capital,0)
 
         if expandSize<(self.size/100):
             self.size -= max(1, self.size * (expandSize / (self.size / 100)) / 4)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
-            self.size = max(self.size, 0)
+        self.size = max(self.size, 0)
 
 
     def produce(self):

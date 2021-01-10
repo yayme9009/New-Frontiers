@@ -16,8 +16,8 @@ write_goods_header({v: k for k, v in labDict.items()},{v: k for k, v in goodsDic
 
 #initialize the starting goods the market has
 for planet in planets:
-    for i in range(len(planet.industries)):
-        planet.industries[i].goods_init()
+    for key,ind in planet.industries.items():
+        ind.goods_init()
 
 
 for i in range(250):

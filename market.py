@@ -3,6 +3,9 @@
 #for a typical market cycle, want to call labour market->.use()->.planning()->.sell()->.buy()->market transfers
 #don't forget to update planning variables
 
+
+#TODO: if no supply of good market crashes, handle exception
+
 def market(planets,techDict,lenLab,lenGoods):
     #this function iterates through planets and generates a list of orders that will go into the market
     #this function deals with the first turn of the market: the production cycle
@@ -20,8 +23,8 @@ def market(planets,techDict,lenLab,lenGoods):
             planets[i].pops[j].income=0
 
         #then generate production orders from industries
-        for j in range(len(planets[i].industries)):
-            planets[i].orders.append(planets[i].industries[j].buy_labour())
+        for key,ind in planets[i].industries.items():
+            planets[i].orders.append(ind.buy_labour())
 
         [planets[i].labDemand,planets[i].labSupply]=demand_supply(planets[i].orders,lenLab)
 
@@ -75,18 +78,19 @@ def market(planets,techDict,lenLab,lenGoods):
         planets[i].orders=[]
 
         #here industries give out dividends and new industries created
+
         planets[i].give_dividends()
         planets[i].use_investment(techDict)
-
+        planets[i].purge()
 
         #production phase, uses stock of goods to generate goods for sale & prep for next phase
-        for j in range(len(planets[i].industries)):
-            planets[i].industries[j].use(planets[i].prices)
+        for key,ind in planets[i].industries.items():
+            ind.use(planets[i].prices)
 
             #selling goods produced
-            planets[i].orders+=planets[i].industries[j].sell()
-            planets[i].industries[j].planning(planets[i].wages,planets[i].prices)
-            planets[i].industries[j].buy_goods()
+            planets[i].orders+=ind.sell()
+            ind.planning(planets[i].wages,planets[i].prices)
+            planets[i].orders+=ind.buy_goods()
 
 
         #goods market phase, sell goods to planetary market, split the market resolution into it's own function? TODO: split the market cycle into their own functions
@@ -114,6 +118,7 @@ def market(planets,techDict,lenLab,lenGoods):
                         planets[i].pops[order.actorID].savings += planets[i].prices[order.goodID] * goodsSold
                     else:
                         goodsBought=order.amount * min(1,demandFill[order.goodID])
+
                         planets[i].pops[order.actorID].bought[order.goodID] += goodsBought
 
                         planets[i].pops[order.actorID].savings -= planets[i].prices[order.goodID] * goodsBought
@@ -132,6 +137,9 @@ def market(planets,techDict,lenLab,lenGoods):
                         exp = planets[i].prices[order.goodID] * goodsBought
                         planets[i].industries[order.actorID].savings -= exp
                         planets[i].industries[order.actorID].expenses += exp
+
+                        if planets[i].industries[order.actorID].savings<0:
+                            print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
 
         priceChange=0.05
         minPrice=0.05

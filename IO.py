@@ -150,7 +150,8 @@ def read_planets(labourDict,goodsDict,techniquesDict,popTypesDict,needslist,file
                 #industries
                 #parameters: name, name of production technique, size, savings, capital level
                 params=line.split(",")
-                planets[planetCounter].industries.append(industry(len(planets[planetCounter].industries)-1,params[0],techniquesDict[params[1]],int(params[2]),float(params[3]),int(params[4]),len(labourDict),len(goodsDict)))
+                newid=generate_id()
+                planets[planetCounter].industries[newid]=industry(newid,params[0],techniquesDict[params[1]],int(params[2]),float(params[3]),int(params[4]),len(labourDict),len(goodsDict))
         elif line=="\n":
             stage+=1
         else:
@@ -199,7 +200,7 @@ def write_to_log(turnnum,planets,filepath="data\\log.csv"):
         #GDP+=price_list(planet.supply,planet.prices)
 
 
-        for ind in planet.industries:
+        for key,ind in planet.industries.items():
             companySize+=ind.size
             money+=ind.savings
             indSavings+=ind.savings
@@ -213,7 +214,7 @@ def write_to_log(turnnum,planets,filepath="data\\log.csv"):
     OOC=0
     ROSV=0
     for planet in planets:
-        for ind in planet.industries:
+        for key,ind in planet.industries.items():
             ROP+=ind.ROP*ind.size/companySize
             OOC+=ind.OOC*ind.size/companySize
             ROSV+=ind.ROSV*ind.size/companySize
