@@ -90,7 +90,7 @@ def market(planets,techDict,lenLab,lenGoods):
             #selling goods produced
             planets[i].orders+=ind.sell()
             ind.planning(planets[i].wages,planets[i].prices)
-            planets[i].orders+=ind.buy_goods()
+            planets[i].orders+=ind.buy_goods(planets[i].prices)
 
 
         #goods market phase, sell goods to planetary market, split the market resolution into it's own function? TODO: split the market cycle into their own functions
