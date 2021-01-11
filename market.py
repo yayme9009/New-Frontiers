@@ -20,7 +20,7 @@ def market(planets,techDict,lenLab,lenGoods):
 
         #first generate labour from pops
         for j in range(len(planets[i].pops)):
-            planets[i].orders.append(planets[i].pops[j].labour())
+            planets[i].orders.append(planets[i].pops[j].labour(planets[i].prices))
             planets[i].pops[j].income=0
 
         #then generate production orders from industries
@@ -77,8 +77,6 @@ def market(planets,techDict,lenLab,lenGoods):
                     planets[i].wages[j]-=planets[i].wages[j]*0.1
 
                 pricePercentChange=(0.1)/(1+pow(e,-(demandFill[j]-1)/2))
-
-                print(pricePercentChange)
 
                 planets[i].wages[j]=max(minWage,planets[i].wages[j]*(1-pricePercentChange))
             else: #undersupply
@@ -179,6 +177,7 @@ def market(planets,techDict,lenLab,lenGoods):
         #now pops use the stock they've bought
         for j in range(len(planets[i].pops)):
             planets[i].pops[j].use_stock()
+            #planets[i].pops[j].grow()
 
         #here pops invest in planet
         planets[i].get_investment()

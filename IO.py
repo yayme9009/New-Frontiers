@@ -168,10 +168,15 @@ def read_planets(labourDict,goodsDict,techniquesDict,popTypesDict,needslist,file
 
 
 
+
+
+
+
+
 #output functions
 def write_log_header(filepath="data\\log.csv"):
     file=open(filepath,"w")
-    file.write("Turn #,Population,Needs Fulfillment,GDP,Money Supply,Pop Savings,Industrial Savings,Rate of Profit,Rate of Surplus Value,Organic Composition of Capital\n")
+    file.write("Turn #,Population,Needs Fulfillment,GDP,Money Supply,Pop Savings,Industrial Savings,Total Capacity,Average Capital,Rate of Profit,Rate of Surplus Value,Organic Composition of Capital\n")
     file.close()
 
 def write_to_log(turnnum,planets,filepath="data\\log.csv"):
@@ -213,13 +218,18 @@ def write_to_log(turnnum,planets,filepath="data\\log.csv"):
     ROP=0
     OOC=0
     ROSV=0
+    capital=0
     for planet in planets:
         for key,ind in planet.industries.items():
             ROP+=ind.ROP*ind.size/companySize
             OOC+=ind.OOC*ind.size/companySize
             ROSV+=ind.ROSV*ind.size/companySize
+            capital+=ind.capital
+        capital=capital/len(planet.industries)
+    capital=capital/len(planets)
 
-    writeString+=str(ROP)+","+str(ROSV)+","+str(OOC)+"\n"
+
+    writeString+=str(companySize)+","+str(capital)+","+str(ROP)+","+str(ROSV)+","+str(OOC)+"\n"
 
     file.write(writeString)
 

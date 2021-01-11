@@ -3,25 +3,25 @@ Labour
 
 Food:5
 
-Capital:0.5
+Capital:1
 
-Size:0.5
+Size:1
 ---
 Factory
 Labour
 
 Capital:1
 
-Capital:0.5
+Capital:1
 
-Size:0.5
+Size:1
 ---
 Expansion
 Labour
 
 Size:1
 
-Capital:0.5
+Capital:1
 
-Size:0.5
+Size:1
 ---

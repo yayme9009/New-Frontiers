@@ -164,9 +164,17 @@ class pop:
 
         #political variables
 
-    def labour(self):
-        #reset planning variables
-        self.income=0
+    def labour(self,prices):
+
+        needsCost=0
+        for need in self.needs:
+            needsCost+=price_list(need,prices)
+
+        #this factor increases if pop is starving and decreases if pop has savings and needs are fulfilled
+        #labourFactor=max(0.05,1+(1-sum(self.needsmet)/len(self.needsmet))-(1/(1+math.pow(math.e,-5*(self.income/needsCost-5)))))
+
+        # reset planning variables
+        self.income = 0
 
         #produces a labour selling order, labourTuple is the list of labour tiers and what good id they correspond to
         return sellOrder(self.id,True, True, self.labourTier,self.population,0) #one labour unit produced per population
@@ -211,6 +219,10 @@ class pop:
         #print(budget,prices,unitPrice)
 
         return orders
+
+    def grow(self):
+        #population growth based on needs fulfilled
+        self.population*=1+(0.03*self.needsmet[0]) #only life needs considered here
 
 
 class industry:
@@ -288,7 +300,7 @@ class industry:
 
         # maintenance of capital, each capital costs 1/10th the goods needed to build it
         budget -= self.capital / 100 * capitalCost
-        budget -= self.size / 100 * sizeCost
+        budget -= math.pow(self.size/100,1.1) * sizeCost
 
         if budget>0:
 
@@ -308,9 +320,7 @@ class industry:
                 budget-=self.prodPlanLvl*unitCost
 
             #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
-            keep=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
-            #if keep<0:
-            #    print("\t",keep)
+
             budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
 
             if budget>0:
@@ -329,7 +339,7 @@ class industry:
                     #else, mixture of capital intensity and size expansion
                     sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
 
-                    expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)) #higher means more extensive vs intensive investment
+                    expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)*(self.size/(self.capital+0.1))) #higher means more extensive vs intensive investment
                     #first sizeCapRatio measures how expensive it is to build capital instead of size
                     #then profit% modifies whether adding more space or intensity is profitable
 
@@ -403,7 +413,7 @@ class industry:
         self.maintenance+=min(possibleCap-expandCapital, self.capital/100)*capitalCost
 
         goodChange=[0]*len(self.stock)
-        possibleSize=max(0,sizeDiff+self.size/100)
+        possibleSize=max(0,sizeDiff+math.pow(self.size/100,1.1))
         for i in range(len(self.production.sizeUnit)):
             if self.production.sizeUnit[i]!=0:
                 possibleSize=min(possibleSize,self.stock[i]/self.production.sizeUnit[i])
@@ -411,21 +421,21 @@ class industry:
         goodChange=[possibleSize*x for x in self.production.sizeUnit]
         remove_stock(self.stock,goodChange)
 
-        expandSize=max(possibleSize-(self.size/100),0)
+        expandSize=max(possibleSize-math.pow(self.size/100,1.1),0)
         self.size+=expandSize #add size
         self.expansion+=expandSize*sizeCost
-        self.maintenance+=min(possibleSize-expandSize,self.size/100)*sizeCost
+        self.maintenance+=min(possibleSize-expandSize,math.pow(self.size/100,1.1))*sizeCost
 
         #here the industry uses up it's items, call the production function
         self.produce()
 
         #if failed to get goods to maintain capital, start lowering capital
         if expandCapital<(self.capital/100):
-            self.capital-=max(1,self.capital*(expandCapital/(self.capital/100))/4) #maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
+            self.capital-=max(1,self.capital*(expandCapital/(self.capital/100))/2) #maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
         self.capital=max(self.capital,0)
 
-        if expandSize<(self.size/100):
-            self.size -= max(1, self.size * (expandSize / (self.size / 100)) / 4)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
+        if expandSize<(math.pow(self.size/100,1.1)):
+            self.size -= max(1, self.size * (expandSize / (math.pow(self.size/100,1.1))) / 2)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
         self.size = max(self.size, 0.1)
 
 
@@ -454,7 +464,9 @@ class industry:
 
         #outUnits+=self.capital
 
-        outUnits*=1+(math.log(self.capital/self.size+1,2)) #probably should modify the horizontal asymptote with tech
+        #outUnits*=1+(math.log(self.capital/self.size+1,2)) #probably should modify the horizontal asymptote with tech
+
+        outUnits*=2-1/(self.capital+1) #reciprocal, caps capital efficiency production
 
         outUnits*=randOutFactor
 
@@ -496,7 +508,7 @@ class industry:
         alreadySpent=0
 
         #buy maintenance goods first
-        buyingUnits=min(self.size/100*sizeCost,self.savings/sizeCost)
+        buyingUnits=min(math.pow(self.size/100,1.1)*sizeCost,self.savings/sizeCost)
         alreadySpent=buyingUnits*sizeCost
 
         add_stock(orderlist, [x*buyingUnits for x in self.production.sizeUnit])
