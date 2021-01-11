@@ -7,6 +7,25 @@ Capital:1
 
 Size:1
 ---
+Forestry
+Labour
+
+Wood:5
+
+Capital:1
+
+Size:1
+---
+Furniture Factory
+Labour
+Wood:5
+
+Furniture:5
+
+Capital:1
+
+Size:1
+---
 Factory
 Labour
 

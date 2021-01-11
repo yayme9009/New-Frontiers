@@ -73,7 +73,7 @@ class planet:
         #average costs of techniques used to determine starting funds
         costs=[tech.costs(self.wages,self.prices) for tech in techsSorted]
 
-        startCap=sum(costs)/len(costs)*500 #average cost of goods times 500
+        startCap=sum(costs)/len(costs)*1500 #average cost of goods times 500
         numInds=math.floor(self.investment/startCap) #max factories being made
 
         #the Jefferson method is used to determine which productions they use
@@ -148,8 +148,8 @@ class pop:
         self.population=popln
         self.savings=s #liquid cash the pop has
         self.needs=need #list of list of goods the pops need
-        self.needsmet=[0]*len(need) #how fufilled pop needs are
-        self.bought=[0]*len(need)
+        self.needsmet=[0]*len(need[0]) #how fufilled pop needs are
+        self.bought=[0]*len(need[0])
 
         self.labourTier=0 #for now all labour is the same
 

@@ -1,8 +1,10 @@
 90,10
 
 Capitalist,100,10000
-Labourer,300,3000
+Labourer,500,5000
 
 A,Farm,100,10000,0
+B,Forestry,100,10000,0
+B,Furniture Factory,100,10000,0
 B,Factory,100,10000,0
 C,Expansion,100,10000,0

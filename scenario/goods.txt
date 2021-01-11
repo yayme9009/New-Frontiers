@@ -1,5 +1,7 @@
 Labour
 
 Food
+Wood
+Furniture
 Capital
 Size
