@@ -213,7 +213,7 @@ class pop:
 
             #decide where the cash for each need goes
 
-            buyList = [prices[j]*self.needs[i][j]*multiplyFactor*self.population for j in range(len(prices))]
+            buyList = [self.needs[i][j]*multiplyFactor*self.population for j in range(len(prices))]
 
 
             orders+=list_to_order(buyList, self.id, False, True, 0)
@@ -267,7 +267,7 @@ class industry:
         self.labour=0
         self.expansion=0 #funds devoted to expansion
         self.returned=0 #funds devoted to paying down loans
-        self.constant=0 #funds devoted to maintaining capital, provides the c in c/v or OOC
+        self.constant=0 #funds devoted to maintaining capital and goods for production, provides the c in c/v or OOC
         self.expenses=s2 #expenses last turn
 
         #marxian indicators
@@ -308,7 +308,7 @@ class industry:
         maintenanceCost=self.capital / 100 * capitalCost+math.pow(self.size/100,1.1) * sizeCost
         maintainPercent=min(1.0,budget/maintenanceCost)
 
-        orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent*prices[i] for i in range(len(self.production.capitalUnit))],self.id,False,True,1)+list_to_order([self.production.sizeUnit[i]*maintainPercent*prices[i] for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
+        orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent for i in range(len(self.production.capitalUnit))],self.id,False,True,1)+list_to_order([self.production.sizeUnit[i]*maintainPercent for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
 
         if maintenanceCost>budget:
             #kill expansion plans
@@ -341,7 +341,7 @@ class industry:
         #buying of labour is already handled in buy_labour() function
         buylist=[0]*len(prices)
         for i in range(len(self.production.inGoods)):
-            buylist[self.production.inGoods[i]]+=self.prodPlanLvl*self.production.inAmts[i]*prices[self.production.inGoods[i]]
+            buylist[self.production.inGoods[i]]+=self.prodPlanLvl*self.production.inAmts[i]
 
         orders+=list_to_order(buylist,self.id,False,True,1)
 
@@ -378,8 +378,8 @@ class industry:
             capDiff=self.caplvl-self.capital
             sizeDiff=self.sizelvl-self.size
 
-            orders+=list_to_order([prices[i]*self.production.capitalUnit[i]*capDiff for i in range(len(prices))],self.id,False,True,1)
-            orders+=list_to_order([prices[i]*self.production.sizeUnit[i]*sizeDiff for i in range(len(prices))],self.id,False,True,1)
+            orders+=list_to_order([self.production.capitalUnit[i]*capDiff for i in range(len(prices))],self.id,False,True,1)
+            orders+=list_to_order([self.production.sizeUnit[i]*sizeDiff for i in range(len(prices))],self.id,False,True,1)
 
         else:
             #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
@@ -443,7 +443,7 @@ class industry:
         expandCapital=max(0,(possibleCap)-(self.capital/100))
         self.capital+=expandCapital #add capital
         self.expansion+=expandCapital*capitalCost
-        self.maintenance+=min(possibleCap-expandCapital, self.capital/100)*capitalCost
+        self.constant+=min(possibleCap-expandCapital, self.capital/100)*capitalCost
 
         goodChange=[0]*len(self.stock)
         possibleSize=max(0,sizeDiff+math.pow(self.size/100,1.1))
@@ -457,10 +457,10 @@ class industry:
         expandSize=max(possibleSize-math.pow(self.size/100,1.1),0)
         self.size+=expandSize #add size
         self.expansion+=expandSize*sizeCost
-        self.maintenance+=min(possibleSize-expandSize,math.pow(self.size/100,1.1))*sizeCost
+        self.constant+=min(possibleSize-expandSize,math.pow(self.size/100,1.1))*sizeCost
 
         #here the industry uses up it's items, call the production function
-        self.produce()
+        self.produce(prices)
 
         #if failed to get goods to maintain capital, start lowering capital
         if expandCapital<(self.capital/100):
@@ -472,13 +472,18 @@ class industry:
         self.size = max(self.size, 0.1)
 
 
-    def produce(self):
+    def produce(self,prices):
         #churn out however many units of output the industry decided upon making or can actually produce
         #prodPlanLvl should already be set before this function is called
         random.seed()
         randOutFactor=random.uniform(0.95,1.05) #a little bit of randomness here to differentiate the companies, avoid collapse all at once
 
         self.prodActLvl=min(self.prodPlanLvl,self.find_max_produce())
+
+        useList=[0]*len(self.stock)
+        for i in range(len(self.production.inGoods)):
+            useList[i]+=self.prodActLvl*self.production.inAmts[i]
+        self.constant+=price_list(useList,prices)
 
         #first remove stock
         #not sure if this is nessecary, since stock cleared every turn
@@ -517,13 +522,13 @@ class industry:
         #returns a list of orders that sells the stuff the company has produced
         orders=[]
         for out in self.production.outGoods:
-            orders.append(sellOrder(self.id, False, False,out, self.stock[out],1))
+            orders.append(sellOrder(self.id, False,out, self.stock[out],1))
         return orders
 
     def buy_labour(self):
         #function that puts out buy orders for labour based on previously calculated planning variables
 
-        return buyOrder(self.id, True, False, self.production.labour, self.prodPlanLvl,1)
+        return buyOrder(self.id, True, self.production.labour, self.prodPlanLvl,1)
 
 
 class order:
@@ -537,17 +542,17 @@ class order:
         self.sector=sec #sector, 0 for pop, 1 for industry, 2 for government
 
 class buyOrder(order):
-    def __init__(self,ID,lab,good,cash,sec):
+    def __init__(self,ID,lab,good,amt,sec):
         super(buyOrder, self).__init__(ID,lab, True, good,sec)
         #self.money=cash #amount of money the actor is paying
-        self.money=cash
+        self.amount=amt
 
 class sellOrder(order):
     def __init__(self,ID,lab,good,amt,sec):
         super(sellOrder, self).__init__(ID,lab, False, good,sec)
         self.amount=amt #amount of stuff that actor is selling
 
-        self.moneyChange=0 #amount of money that changes hands, could use self.money but this retains consistency with buyOrder
+        #self.moneyChange=0 #amount of money that changes hands, could use self.money but this retains consistency with buyOrder
 
 
 class technique:

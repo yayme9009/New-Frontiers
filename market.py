@@ -182,13 +182,13 @@ def market(planets,techDict,lenLab,lenGoods):
         planets[i].get_investment()
 
 
-def demand_supply(orders,prices):
+def demand_supply(orders,lenprices):
     #this function takes the list of orders and spits out total [demand,supply] lists of each.
-    demandlist=[0]*len(prices)
-    supplylist=[0]*len(prices)
+    demandlist=[0]*lenprices
+    supplylist=[0]*lenprices
     for order in orders:
         if order.isBuying:
-            demandlist[order.goodID]+=order.money/prices[order.goodID]
+            demandlist[order.goodID]+=order.amount
         else:
             supplylist[order.goodID]+=order.amount
     return [demandlist,supplylist]
