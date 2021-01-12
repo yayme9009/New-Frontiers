@@ -30,5 +30,7 @@ for i in range(250):
     #print(planets[0].pops[0].savings,planets[0].pops[1].savings)
 
     print(i,len(planets[0].industries))
+
+
     write_to_log(i,planets)
     write_goods(planets)

@@ -7,4 +7,4 @@ A,Farm,100,10000,0
 B,Forestry,100,10000,0
 B,Furniture Factory,100,10000,0
 B,Factory,100,10000,0
-C,Expansion,100,10000,0
+C,Construction,100,10000,0

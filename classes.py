@@ -177,7 +177,7 @@ class pop:
         self.income = 0
 
         #produces a labour selling order, labourTuple is the list of labour tiers and what good id they correspond to
-        return sellOrder(self.id,True, True, self.labourTier,self.population,0) #one labour unit produced per population
+        return sellOrder(self.id, True, self.labourTier,self.population,0) #one labour unit produced per population
 
     def use_stock(self):
         #generates a fulfillment index based on what the pop has bought
@@ -210,8 +210,13 @@ class pop:
         for i in range(len(self.needs)):
             unitPrice=price_list(self.needs[i],prices) #how much one unit (1 population) of needs costs
             multiplyFactor=min(1.0, budget/(unitPrice*self.population)) #proportion of needs pop can fulfill with this budget
-            buyList = [x*multiplyFactor*self.population for x in self.needs[i]]
-            orders+=list_to_order(buyList, self.id, False, True, True, 0)
+
+            #decide where the cash for each need goes
+
+            buyList = [prices[j]*self.needs[i][j]*multiplyFactor*self.population for j in range(len(prices))]
+
+
+            orders+=list_to_order(buyList, self.id, False, True, 0)
             budget-=unitPrice*multiplyFactor*self.population
             if budget<=0:
                 break
@@ -262,7 +267,7 @@ class industry:
         self.labour=0
         self.expansion=0 #funds devoted to expansion
         self.returned=0 #funds devoted to paying down loans
-        self.maintenance=0 #funds devoted to maintaining capital, provides the c in c/v or OOC
+        self.constant=0 #funds devoted to maintaining capital, provides the c in c/v or OOC
         self.expenses=s2 #expenses last turn
 
         #marxian indicators
@@ -283,12 +288,11 @@ class industry:
         self.income=self.expenses #needed to avoid planning wonkiness
 
     def planning(self,labprices,prices):
-        #planning function that sets levels of production for the next turn
+        #planning function that sets levels of production for the next turn, returns a list of goods to buy
         #should set prodplanlvl, caplvl and sizelvl
         profitpercent=(self.income-self.expenses+self.expansion+self.returned)/(self.expenses-self.expansion-self.returned) #this measure is intended to be a measure of the profitability of the company, so expansion costs and debt repayments are excluded
 
-        if self.savings<0:
-            print("b",self.savings)
+        self.Marxist_indicators()
 
         budget=self.savings
 
@@ -298,86 +302,115 @@ class industry:
         capitalCost = price_list(self.production.capitalUnit, prices) #maintaincost is 1/10th capitalCost
         sizeCost=price_list(self.production.sizeUnit,prices)
 
+        orders=[]
+
         # maintenance of capital, each capital costs 1/10th the goods needed to build it
-        budget -= self.capital / 100 * capitalCost
-        budget -= math.pow(self.size/100,1.1) * sizeCost
+        maintenanceCost=self.capital / 100 * capitalCost+math.pow(self.size/100,1.1) * sizeCost
+        maintainPercent=min(1.0,budget/maintenanceCost)
 
-        if budget>0:
+        orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent*prices[i] for i in range(len(self.production.capitalUnit))],self.id,False,True,1)+list_to_order([self.production.sizeUnit[i]*maintainPercent*prices[i] for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
 
-            random.seed()
-            randomProdFactor=random.uniform(0.95,1.05) #range of 10 percentage points, modifies level set
+        if maintenanceCost>budget:
+            #kill expansion plans
+            self.reset_planning_vars()
 
-            canAfford=budget/unitCost
+            self.caplvl = self.capital
+            self.sizelvl = self.size
+            return orders
 
-            if profitpercent<0:
-                #if this production is losing money
-                self.prodPlanLvl=min(canAfford,randomProdFactor*self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
+        budget-=maintenanceCost #if couldn't afford maintenance would've already returned, maybe should think about letting industry decay
 
-                budget-=self.prodPlanLvl*unitCost
+        #planning levels of production
 
-            else:
-                self.prodPlanLvl=min(self.size, randomProdFactor*self.prodActLvl*(1+max(1,profitpercent)), canAfford)
-                budget-=self.prodPlanLvl*unitCost
+        random.seed()
+        randomProdFactor=random.uniform(0.95,1.05) #range of 10 percentage points, modifies level set
 
-            #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
+        canAfford=budget/unitCost
 
-            budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
+        if profitpercent<0:
+            #if this production is losing money
+            self.prodPlanLvl=min(canAfford,randomProdFactor*self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
 
-            if budget>0:
-                #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
-                #this is where adding space vs adding capital comes into play
-
-                #expansionPlan=budget/max(sizeCost,capitalCost)/2 #this variable shows the target amount of expansion this industry wants to do
-
-                if profitpercent<0:
-                    #if profit is negative no increase in size will ever be profitable, dump resources into intensity
-                    expansionPlan=budget/(2*capitalCost)
-                    self.caplvl=self.capital+(expansionPlan)
-                    self.sizelvl=self.size
-
-                else:
-                    #else, mixture of capital intensity and size expansion
-                    sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
-
-                    expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)*(self.size/(self.capital+0.1))) #higher means more extensive vs intensive investment
-                    #first sizeCapRatio measures how expensive it is to build capital instead of size
-                    #then profit% modifies whether adding more space or intensity is profitable
-
-                    expansionPlan=budget/((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))/2 #modify the amount of capacity you want to add
-
-                    self.caplvl=(1-expandRatio)*expansionPlan+self.capital
-                    self.sizelvl=(expandRatio)*expansionPlan+self.size
-
-
-            else:
-                #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
-                self.caplvl = self.capital
-                self.sizelvl = self.size
-
-                #TODO: loan flag here when banks implemented
+            budget-=self.prodPlanLvl*unitCost
 
         else:
-            self.caplvl=self.capital
-            self.sizelvl=self.size
+            self.prodPlanLvl=min(self.size, randomProdFactor*self.prodActLvl*(1+max(1,profitpercent)), canAfford)
+            budget-=self.prodPlanLvl*unitCost
 
-        #calculate Marxian indicators
-        surplus=(self.income-self.maintenance-self.labour)
-        try:
-            self.ROP=surplus/(self.maintenance+self.labour)
-        except ZeroDivisionError:
-            self.ROP=0
-        try:
-            self.ROSV=surplus/(surplus+self.labour)
-        except ZeroDivisionError:
-            self.ROSV=0
-        try:
-            self.OOC=self.maintenance / self.labour
-        except ZeroDivisionError:
-            self.OOC=0
+        #add goods from prodPlanLvl to order list
+        #buying of labour is already handled in buy_labour() function
+        buylist=[0]*len(prices)
+        for i in range(len(self.production.inGoods)):
+            buylist[self.production.inGoods[i]]+=self.prodPlanLvl*self.production.inAmts[i]*prices[self.production.inGoods[i]]
 
-        #reset planning variables, important for future market stuff
-        self.income=0
-        self.expenses=0
+        orders+=list_to_order(buylist,self.id,False,True,1)
+
+        #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
+
+        budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
+
+        if budget>0:
+            #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
+            #this is where adding space vs adding capital comes into play
+
+            #expansionPlan=budget/max(sizeCost,capitalCost)/2 #this variable shows the target amount of expansion this industry wants to do
+
+            if profitpercent<0:
+                #if profit is negative no increase in size will ever be profitable, dump resources into intensity
+                expansionPlan=budget/(2*capitalCost)
+                self.caplvl=self.capital+(expansionPlan)
+                self.sizelvl=self.size
+
+            else:
+                #else, mixture of capital intensity and size expansion
+                sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
+
+                expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)*(self.size/(self.capital+0.1))) #higher means more extensive vs intensive investment
+                #first sizeCapRatio measures how expensive it is to build capital instead of size
+                #then profit% modifies whether adding more space or intensity is profitable
+
+                expansionPlan=budget/((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))/2 #modify the amount of capacity you want to add
+
+                self.caplvl=(1-expandRatio)*expansionPlan+self.capital
+                self.sizelvl=(expandRatio)*expansionPlan+self.size
+
+            #no matter the expansion plan, add in the orders here
+            capDiff=self.caplvl-self.capital
+            sizeDiff=self.sizelvl-self.size
+
+            orders+=list_to_order([prices[i]*self.production.capitalUnit[i]*capDiff for i in range(len(prices))],self.id,False,True,1)
+            orders+=list_to_order([prices[i]*self.production.sizeUnit[i]*sizeDiff for i in range(len(prices))],self.id,False,True,1)
+
+        else:
+            #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
+            self.caplvl = self.capital
+            self.sizelvl = self.size
+
+            #TODO: loan flag here when banks implemented
+
+        return orders
+
+
+    def Marxist_indicators(self):
+        # calculate Marxian indicators
+        surplus = (self.income - self.constant - self.labour)
+        try:
+            self.ROP = surplus / (self.constant + self.labour)
+        except ZeroDivisionError:
+            self.ROP = 0
+        try:
+            self.ROSV = surplus / (surplus + self.labour)
+        except ZeroDivisionError:
+            self.ROSV = 0
+        try:
+            self.OOC = self.constant / self.labour
+        except ZeroDivisionError:
+            self.OOC = 0
+
+    def reset_planning_vars(self):
+        # reset planning variables, important for future market stuff
+        self.income = 0
+        self.expenses = 0
         # reset planning variables
         self.expansion = 0
         self.returned = 0
@@ -492,75 +525,28 @@ class industry:
 
         return buyOrder(self.id, True, False, self.production.labour, self.prodPlanLvl,1)
 
-    def buy_goods(self,prices):
-        newCap=(self.caplvl-self.capital)
-        newSize=(self.sizelvl-self.size)
-
-        #function that puts out buy orders for goods that are needed for production and growth
-        orderlist=[0]*len(self.stock)
-
-        capitalCost=price_list(self.production.capitalUnit,prices)
-        sizeCost = price_list(self.production.sizeUnit, prices)
-
-        if (newCap*capitalCost+(newSize*sizeCost))>self.savings:
-            print("a",newCap,capitalCost,newSize,sizeCost,self.savings)
-
-        alreadySpent=0
-
-        #buy maintenance goods first
-        buyingUnits=min(math.pow(self.size/100,1.1)*sizeCost,self.savings/sizeCost)
-        alreadySpent=buyingUnits*sizeCost
-
-        add_stock(orderlist, [x*buyingUnits for x in self.production.sizeUnit])
-
-        if alreadySpent>=self.savings:
-            return list_to_order(orderlist,self.id,False,False,True,1)
-
-        buyingUnits=min(self.capital/100*capitalCost,(self.savings-alreadySpent)/capitalCost)
-        alreadySpent+=buyingUnits*capitalCost
-
-        add_stock(orderlist,[x*buyingUnits for x in self.production.capitalUnit])
-
-        if alreadySpent>=self.savings:
-            return list_to_order(orderlist,self.id,False,False,True,1)
-
-        #expansion plans here, should already be priced in self.planning()
-
-        add_stock(orderlist,[x*newCap for x in self.production.capitalUnit])
-        add_stock(orderlist,[x*newSize for x in self.production.sizeUnit])
-
-        #print(self.production.capitalUnit)
-
-        orderlist=list_to_order(orderlist,self.id,False,False,True,1)
-
-        #finally buy goods for production
-        for i in range(len(self.production.inGoods)):
-            orderlist.append(buyOrder(self.id,False,False,self.production.inGoods[i],self.production.inAmts[i]*self.prodPlanLvl,1))
-
-        return orderlist
 
 class order:
     #transaction object used to keep track of goods and services on the market
-    def __init__(self,ID,lab,pop,buying,good,sec):
+    def __init__(self,ID,lab,buying,good,sec):
         self.actorID=ID #this is an ID object of the economic actor placing the order
         self.isLabour=lab
-        self.isPop=pop #true if pop and false if industry
+        #self.isPop=pop #true if pop and false if industry
         self.isBuying=buying
         self.goodID=good
         self.sector=sec #sector, 0 for pop, 1 for industry, 2 for government
 
 class buyOrder(order):
-    def __init__(self,ID,lab,pop,good,amt,sec):
-        super(buyOrder, self).__init__(ID,lab,pop, True, good,sec)
+    def __init__(self,ID,lab,good,cash,sec):
+        super(buyOrder, self).__init__(ID,lab, True, good,sec)
         #self.money=cash #amount of money the actor is paying
-        self.amount=amt #amount of goods that the actor wants to buy
-        self.moneyChange=0 #amount of money that changes hands
+        self.money=cash
 
 class sellOrder(order):
-    def __init__(self,ID,lab,pop,good,amt,sec):
-        super(sellOrder, self).__init__(ID,lab,pop, False, good,sec)
+    def __init__(self,ID,lab,good,amt,sec):
+        super(sellOrder, self).__init__(ID,lab, False, good,sec)
         self.amount=amt #amount of stuff that actor is selling
-        #self.money=0 #money gained from sale
+
         self.moneyChange=0 #amount of money that changes hands, could use self.money but this retains consistency with buyOrder
 
 
@@ -735,20 +721,6 @@ class database:
         self.entries.pop(self.indices.index(index))
         self.indices.remove(index)
 
-'''
-class stock:
-    def __init__(self):
-        self.entries=[] #stock entries
-    def add_stock(self,g,amount):
-        
-
-class entry:
-    #good stock entry, only has two attributes
-    def __init__(self,g,amount):
-        self.good=g #good name
-        self.amt=amount
-'''
-
 def find_first_index(list, num):
     #takes a 2D list and a number and returns the first index such that list[index][0]=num, or -1 if not there
     if not list:
@@ -768,18 +740,21 @@ def price_list(list,prices):
         price+=list[i]*prices[i]
     return price
 
-def list_to_order(list, id, lab, pop, buy,sec):
+
+def list_to_order(list, id, lab, buy,sec):
     #converts a list of goods into the appropriate list of orders
+    #usually list of cash amounts for each good
     orders=[]
     if buy:
         for i in range(len(list)):
             if list[i]!=0:
-                orders.append(buyOrder(id,lab,pop,i,list[i],sec))
+                orders.append(buyOrder(id,lab,i,list[i],sec))
     else:
         for i in range(len(list)):
             if list[i]!=0:
-                orders.append(sellOrder(id,lab,pop,i,list[i],sec))
+                orders.append(sellOrder(id,lab,i,list[i],sec))
     return orders
+
 
 def add_stock(stock,list):
     #takes two list stocks of equal length and adds
