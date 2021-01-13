@@ -50,8 +50,8 @@ class planet:
         #do this before pops sell labour but after pops buy goods (beginning of cycle say)
         for i in range(len(self.pops)):
             needsCost=sum([price_list(need, self.prices) for need in self.pops[i].needs]) #this assumes pops all have the same needs
-            if self.pops[i].savings>(10*needsCost*self.pops[i].population): #buffer
-                invest=self.pops[i].savings-(10*needsCost*self.pops[i].population)
+            if self.pops[i].savings>(5*needsCost*self.pops[i].population): #buffer
+                invest=self.pops[i].savings-(5*needsCost*self.pops[i].population)
                 self.investment+=invest
                 self.ownership.pops[self.pops[i].poptype]+=invest
                 self.pops[i].savings-=invest
@@ -63,17 +63,18 @@ class planet:
 
         #this sorts techniques by profit percentage
         zipped=zip(profitpercents,range(len(techList)))
-        sortedzip=sorted(zipped)
+        sortedzip=sorted(zipped,reverse=True)
 
         techsSorted=[techList[y] for x,y in sortedzip]
-        profitpercents.sort()
+        #print([x.outGoods for x in techsSorted])
+        profitpercents.sort(reverse=True)
 
         #if need to speed up this function, can get rid of negative value factories
 
         #average costs of techniques used to determine starting funds
         costs=[tech.costs(self.wages,self.prices) for tech in techsSorted]
 
-        startCap=sum(costs)/len(costs)*1500 #average cost of goods times 500
+        startCap=sum(costs)/len(costs)*250 #average cost of goods times 500
         numInds=math.floor(self.investment/startCap) #max factories being made
 
         #the Jefferson method is used to determine which productions they use
@@ -88,8 +89,10 @@ class planet:
         for i in range(len(numIndList)):
             for j in range(numIndList[i]):
                 newid=generate_id()
-                self.industries[newid]=industry(newid,"A",techsSorted[i],1,startCap,0,len(self.wages),len(self.prices)) #industry starts with 1 size free of charge
+                self.industries[newid]=industry(newid,"A",techsSorted[i],5,startCap,0,len(self.wages),len(self.prices)) #industry starts with 5 size free of charge
                 self.industries[newid].new=5 #5 turn grace period on giving out dividends
+
+                self.industries[newid].randFactor=bound((0.5,1.5),random.gauss(1,0.15)) #random factor here
 
         self.investment-=numInds*startCap
 
@@ -137,6 +140,12 @@ class planet:
             self.investment+=self.industries[key].savings
             del self.industries[key]
 
+    def adjust_RandomFactor(self):
+        random.seed()
+        num=random.randint(0,49)
+        for key,ind in self.industries.items():
+            if num%50==ind.randInterval:
+                ind.randFactor=bound((0.5,1.5),random.gauss(1,0.15))
 
 class pop:
     def __init__(self,i,ptype,popln,s,need):
@@ -148,7 +157,7 @@ class pop:
         self.population=popln
         self.savings=s #liquid cash the pop has
         self.needs=need #list of list of goods the pops need
-        self.needsmet=[0]*len(need[0]) #how fufilled pop needs are
+        self.needsmet=[0]*len(need) #how fufilled pop needs are
         self.bought=[0]*len(need[0])
 
         self.labourTier=0 #for now all labour is the same
@@ -248,6 +257,9 @@ class industry:
 
 
         #economic planning variables
+        random.seed()
+        self.randFactor=1 #set it up as 1 to start with to avoid weird economy crashes with only one industry
+        self.randInterval=random.randint(0,49) #how long to change randFactor
 
         self.new=0 #if >0, prevents giving out dividends
 
@@ -304,12 +316,20 @@ class industry:
 
         orders=[]
 
+        maintainBudget=0.8*budget #don't spend more than 80% of budget on maintenance
+
         # maintenance of capital, each capital costs 1/10th the goods needed to build it
         maintenanceCost=self.capital / 100 * capitalCost+math.pow(self.size/100,1.1) * sizeCost
-        maintainPercent=min(1.0,budget/maintenanceCost)
+        maintainPercent=min(1.0,maintainBudget/maintenanceCost)
+
+        sizeCut=False
+        if maintainPercent<1.0:
+            sizeCut=True
+        maintenanceCost*=maintainPercent
 
         orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent for i in range(len(self.production.capitalUnit))],self.id,False,True,1)+list_to_order([self.production.sizeUnit[i]*maintainPercent for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
 
+        '''
         if maintenanceCost>budget:
             #kill expansion plans
             self.reset_planning_vars()
@@ -317,6 +337,7 @@ class industry:
             self.caplvl = self.capital
             self.sizelvl = self.size
             return orders
+        '''
 
         budget-=maintenanceCost #if couldn't afford maintenance would've already returned, maybe should think about letting industry decay
 
@@ -327,6 +348,12 @@ class industry:
 
         canAfford=budget/unitCost
 
+        if profitpercent>0:
+            self.prodPlanLvl = min(canAfford,self.size * (randomProdFactor-0.05))
+        else:
+            self.prodPlanLvl = min(canAfford,self.size * 1/(1+math.pow(math.e,-0.5*(profitpercent+0.5))) * randomProdFactor)
+
+        '''
         if profitpercent<0:
             #if this production is losing money
             self.prodPlanLvl=min(canAfford,randomProdFactor*self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
@@ -336,6 +363,7 @@ class industry:
         else:
             self.prodPlanLvl=min(self.size, randomProdFactor*self.prodActLvl*(1+max(1,profitpercent)), canAfford)
             budget-=self.prodPlanLvl*unitCost
+        '''
 
         #add goods from prodPlanLvl to order list
         #buying of labour is already handled in buy_labour() function
@@ -349,7 +377,7 @@ class industry:
 
         budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
 
-        if budget>0:
+        if budget>0 and (not sizeCut): #can't have already written off size or capital
             #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
             #this is where adding space vs adding capital comes into play
 
@@ -507,6 +535,8 @@ class industry:
         outUnits*=2-1/(self.capital+1) #reciprocal, caps capital efficiency production
 
         outUnits*=randOutFactor
+
+        outUnits*=self.randFactor #random output factor that ensures a heterogeneous industry population
 
         for i in range(len(self.production.outGoods)): #production
             self.stock[self.production.outGoods[i]]=self.production.outAmts[i]*outUnits #not += since this wipes the original stock

@@ -67,7 +67,7 @@ def market(planets,techDict,lenLab,lenGoods):
 
 
         #change prices up or down
-        maxWagePriceChange=1 #how fast the prices change
+        maxWagePriceChange=0.5 #how fast the prices change
         minWage=0.0 #price floor
 
         for j in range(lenLab):
@@ -81,11 +81,11 @@ def market(planets,techDict,lenLab,lenGoods):
                 planets[i].wages[j]=max(minWage,planets[i].wages[j]*(1-pricePercentChange))
             else: #undersupply
                 if demandFill[j]==0: #no supply
-                    planets[i].wages[j]+=min(planets[i].wages[j]*0.1,maxWagePriceChange)
+                    planets[i].wages[j]+=max(planets[i].wages[j]*0.1,maxWagePriceChange) #force price change up to get demand in
                 else:
                     pricePercentChange=(0.1)/(1+pow(e,-(1/demandFill[j]-1)/2))
 
-                    planets[i].wages[j]+=min(planets[i].wages[j]*pricePercentChange,maxWagePriceChange)
+                    planets[i].wages[j]+=max(planets[i].wages[j]*pricePercentChange,maxWagePriceChange*pricePercentChange)
 
         planets[i].orders=[]
 
@@ -157,7 +157,7 @@ def market(planets,techDict,lenLab,lenGoods):
                         if planets[i].industries[order.actorID].savings<0:
                             print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
 
-        maxPriceChange=1
+        maxPriceChange=0.5
         minPrice=0.0
         for j in range(lenGoods):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply
@@ -168,10 +168,10 @@ def market(planets,techDict,lenLab,lenGoods):
                     planets[i].prices[j]=max(minPrice,planets[i].prices[j]*(1-pricePercentChange))
             else: #undersupply
                 if demandFill[j]==0: #no supply
-                    planets[i].prices[j]+=min(maxPriceChange,planets[i].prices[j]*0.1)
+                    planets[i].prices[j]+=max(maxPriceChange,planets[i].prices[j]*0.1) #force big price change up to get demand in
                 else:
                     pricePercentChange = (0.1) / (1 + pow(e, -(1 / demandFill[j] - 1) / 2))
-                    planets[i].prices[j]+=min(maxPriceChange,planets[i].prices[j]*pricePercentChange)
+                    planets[i].prices[j]+=max(maxPriceChange*pricePercentChange,planets[i].prices[j]*pricePercentChange)
 
         #now pops use the stock they've bought
         for j in range(len(planets[i].pops)):
@@ -180,6 +180,7 @@ def market(planets,techDict,lenLab,lenGoods):
 
         #here pops invest in planet
         planets[i].get_investment()
+        planets[i].adjust_RandomFactor()
 
 
 def demand_supply(orders,lenprices):
