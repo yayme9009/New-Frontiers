@@ -69,6 +69,11 @@ class planet:
         #print([x.outGoods for x in techsSorted])
         profitpercents.sort(reverse=True)
 
+        lowest=min(profitpercents)
+        if lowest<0:
+            profitpercents=[x-lowest for x in profitpercents]
+        #techsSorted=techsSorted[:len(profitpercents)]
+
         #if need to speed up this function, can get rid of negative value factories
 
         #average costs of techniques used to determine starting funds
@@ -76,6 +81,7 @@ class planet:
 
         startCap=sum(costs)/len(costs)*250 #average cost of goods times 500
         numInds=math.floor(self.investment/startCap) #max factories being made
+
 
         #the Jefferson method is used to determine which productions they use
         quotients=profitpercents #will change once calculations finished
@@ -104,7 +110,8 @@ class planet:
         #collecting dividends
         self.dividend=0
         for key,ind in self.industries.items():
-            operatingCosts=ind.production.costs(self.wages,self.prices)*ind.size
+            #operatingCosts=ind.production.costs(self.wages,self.prices)*ind.size
+            operatingCosts=ind.expenses-ind.expansion-ind.returned
             if ind.new>0:
                 ind.new-=1
             elif ind.savings>(5*operatingCosts):
@@ -236,7 +243,7 @@ class pop:
 
     def grow(self):
         #population growth based on needs fulfilled
-        self.population*=1+(0.03*self.needsmet[0]) #only life needs considered here
+        self.population*=1+(0.005*self.needsmet[0]) #only life needs considered here
 
 
 class industry:
@@ -325,6 +332,13 @@ class industry:
         sizeCut=False
         if maintainPercent<1.0:
             sizeCut=True
+            #sell size and capital units that are no longer being used
+            orders+=list_to_order([self.production.capitalUnit[i]*(1-maintainPercent) for i in range(len(self.production.capitalUnit))],self.id,False,False,1)
+            orders+=list_to_order([self.production.sizeUnit[i]*(1-maintainPercent) for i in range(len(self.production.sizeUnit))],self.id,False,False,1)
+            self.size*=(1-maintainPercent)
+            self.capital*=(1-maintainPercent)
+
+
         maintenanceCost*=maintainPercent
 
         orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent for i in range(len(self.production.capitalUnit))],self.id,False,True,1)+list_to_order([self.production.sizeUnit[i]*maintainPercent for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
@@ -530,9 +544,9 @@ class industry:
 
         #outUnits+=self.capital
 
-        #outUnits*=1+(math.log(self.capital/self.size+1,2)) #probably should modify the horizontal asymptote with tech
+        outUnits*=1+(math.log(self.capital/self.size+1,2)) #probably should modify the horizontal asymptote with tech
 
-        outUnits*=2-1/(self.capital+1) #reciprocal, caps capital efficiency production
+        #outUnits*=2-1/(self.capital+1) #reciprocal, caps capital efficiency production
 
         outUnits*=randOutFactor
 

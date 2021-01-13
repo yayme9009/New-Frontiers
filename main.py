@@ -20,7 +20,7 @@ for planet in planets:
         ind.goods_init()
 
 
-for i in range(500):
+for i in range(250):
     market(planets,techniques,len(labDict),len(goodsDict))
     #print(planets[0].industries[0].savings,planets[0].industries[1].savings,planets[0].industries[2].savings)
     #print(planets[0].industries[0].size, planets[0].industries[1].size, planets[0].industries[2].size)
@@ -31,6 +31,7 @@ for i in range(500):
 
     print(i,len(planets[0].industries))
 
+    #planets[0].pops[0].savings+=10000
 
     write_to_log(i,planets)
     write_goods(planets)

@@ -181,6 +181,8 @@ def market(planets,techDict,lenLab,lenGoods):
         #here pops invest in planet
         planets[i].get_investment()
         planets[i].adjust_RandomFactor()
+        #for pop in planets[i].pops:
+        #    pop.grow()
 
 
 def demand_supply(orders,lenprices):
