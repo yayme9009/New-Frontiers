@@ -134,9 +134,6 @@ def market(planets,techDict,lenLab,lenGoods):
 
                         planets[i].pops[order.actorID].savings -= planets[i].prices[order.goodID] * goodsBought
 
-                        if planets[i].pops[order.actorID].savings<goodsBought*planets[i].prices[order.goodID]:
-
-                            print("\t",planets[i].pops[order.actorID].savings,order.amount*planets[i].prices[order.goodID],order.actorID)
 
                 elif order.sector == 1:  # industry
                     if not order.isBuying:
@@ -150,12 +147,13 @@ def market(planets,techDict,lenLab,lenGoods):
                         goodsBought=order.amount * min(1, demandFill[order.goodID])
                         planets[i].industries[order.actorID].stock[order.goodID] += goodsBought
 
+                        if planets[i].industries[order.actorID].savings<0:
+                            print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
+
                         exp = planets[i].prices[order.goodID] * goodsBought
                         planets[i].industries[order.actorID].savings -= exp
                         planets[i].industries[order.actorID].expenses += exp
 
-                        if planets[i].industries[order.actorID].savings<0:
-                            print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
 
         maxPriceChange=0.5
         minPrice=0.0

@@ -114,9 +114,9 @@ class planet:
             operatingCosts=ind.expenses-ind.expansion-ind.returned
             if ind.new>0:
                 ind.new-=1
-            elif ind.savings>(5*operatingCosts):
+            elif (ind.savings-ind.planLabCost)>(5*operatingCosts) and ind.savings>0:
                 #excess of money, take off the top as hard cap
-                dividend=ind.savings-(5*operatingCosts)
+                dividend=ind.savings-(5*operatingCosts)+ind.planLabCost
                 ind.savings-=dividend
                 self.dividend+=dividend
 
@@ -277,6 +277,8 @@ class industry:
         self.caplvl=c #desired level of capital in the industry
         self.sizelvl=s1
 
+        self.planLabCost=0 #amount of cash earmarked for labour spending next round
+
         self.prodPlanLvl=self.size #desired level of production in the industry
         self.prodActLvl=self.size #actual level of production in the industry last turn
 
@@ -360,12 +362,22 @@ class industry:
         random.seed()
         randomProdFactor=random.uniform(0.95,1.05) #range of 10 percentage points, modifies level set
 
-        canAfford=budget/unitCost
+        try:
 
-        if profitpercent>0:
-            self.prodPlanLvl = min(canAfford,self.size * (randomProdFactor-0.05))
-        else:
-            self.prodPlanLvl = min(canAfford,self.size * 1/(1+math.pow(math.e,-0.5*(profitpercent+0.5))) * randomProdFactor)
+            canAfford=budget/unitCost
+
+            if profitpercent>0:
+                self.prodPlanLvl = min(canAfford,self.size * (randomProdFactor-0.05))
+            else:
+                self.prodPlanLvl = min(canAfford,self.size * 1/(1+math.pow(math.e,-0.5*(profitpercent+0.5))) * randomProdFactor)
+
+        except ZeroDivisionError: #no good inputs
+            if profitpercent>0:
+                self.prodPlanLvl = self.size * (randomProdFactor-0.05)
+            else:
+                self.prodPlanLvl = self.size * 1/(1+math.pow(math.e,-0.5*(profitpercent+0.5))) * randomProdFactor
+
+
 
         '''
         if profitpercent<0:
@@ -385,15 +397,26 @@ class industry:
         for i in range(len(self.production.inGoods)):
             buylist[self.production.inGoods[i]]+=self.prodPlanLvl*self.production.inAmts[i]
 
+        productionBudget = unitCost * self.prodPlanLvl #not pricelist buylist, need to maintain some cash for labour next round
+
         orders+=list_to_order(buylist,self.id,False,True,1)
+
+        budget -= productionBudget
+
+        self.planLabCost=productionBudget-price_list(buylist,prices) #amount earmarked for labour next round, avoid giving away in dividends
 
         #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
 
-        budget-=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent*2.5)))
+        reserve=(self.expenses-self.expansion-self.returned)/bound((0.2,5),2/(1-(profitpercent)))
+        #reserve=(self.expenses-self.expansion-self.returned)
 
-        if budget>0 and (not sizeCut): #can't have already written off size or capital
+        expansionBudget=0
+
+        if budget>reserve and (not sizeCut): #can't have already written off size or capital
             #profit% shows the current profitability of the production technique, the higher it is the less sense it makes to make it more intensive vs extensive
             #this is where adding space vs adding capital comes into play
+
+            budget-=reserve
 
             #expansionPlan=budget/max(sizeCost,capitalCost)/2 #this variable shows the target amount of expansion this industry wants to do
 
@@ -411,7 +434,7 @@ class industry:
                 #first sizeCapRatio measures how expensive it is to build capital instead of size
                 #then profit% modifies whether adding more space or intensity is profitable
 
-                expansionPlan=budget/((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))/2 #modify the amount of capacity you want to add
+                expansionPlan=budget/(((expandRatio*sizeCost)+((1-expandRatio)*capitalCost))*2) #modify the amount of capacity you want to add
 
                 self.caplvl=(1-expandRatio)*expansionPlan+self.capital
                 self.sizelvl=(expandRatio)*expansionPlan+self.size
@@ -419,6 +442,8 @@ class industry:
             #no matter the expansion plan, add in the orders here
             capDiff=self.caplvl-self.capital
             sizeDiff=self.sizelvl-self.size
+
+            expansionBudget=capDiff*capitalCost+sizeDiff*sizeCost
 
             orders+=list_to_order([self.production.capitalUnit[i]*capDiff for i in range(len(prices))],self.id,False,True,1)
             orders+=list_to_order([self.production.sizeUnit[i]*sizeDiff for i in range(len(prices))],self.id,False,True,1)
@@ -429,6 +454,10 @@ class industry:
             self.sizelvl = self.size
 
             #TODO: loan flag here when banks implemented
+
+        #if price_orders(orders,prices)>self.savings:
+        #    print("\t",price_orders(orders,prices),self.savings)
+
 
         return orders
 
@@ -510,8 +539,9 @@ class industry:
         self.capital=max(self.capital,0)
 
         if expandSize<(math.pow(self.size/100,1.1)):
-            self.size -= max(1, self.size * (expandSize / (math.pow(self.size/100,1.1))) / 2)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
-        self.size = max(self.size, 0.1)
+            #self.size -= max(1, self.size * (expandSize / (math.pow(self.size/100,1.1))) / 2)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
+            self.size -= self.size * (expandSize / (math.pow(self.size / 100, 1.1))) / 2
+        self.size = max(self.size, 0)
 
 
     def produce(self,prices):
@@ -615,14 +645,20 @@ class technique:
     def revenue(self,prices):
         outputs=0
         for i in range(len(self.outGoods)):
-            outputs+=self.outAmts[i]*prices[i]
+            outputs+=self.outAmts[i]*prices[self.outGoods[i]]
         return outputs
 
     def costs(self,labprices,prices):
         inputs=labprices[self.labour] #price of 1 unit of labour
 
         for i in range(len(self.inGoods)):
-            inputs += self.inAmts[i] * prices[i]
+            inputs += self.inAmts[i] * prices[self.inGoods[i]]
+        return inputs
+
+    def good_costs(self,prices):
+        inputs=0
+        for i in range(len(self.inGoods)):
+            inputs += self.inAmts[i] * prices[self.inGoods[i]]
         return inputs
 
     def profit(self,labprices,prices):
@@ -789,6 +825,11 @@ def price_list(list,prices):
         price+=list[i]*prices[i]
     return price
 
+def price_orders(orders,prices):
+    price=0
+    for order in orders:
+        price+=prices[order.goodID]*order.amount
+    return price
 
 def list_to_order(list, id, lab, buy,sec):
     #converts a list of goods into the appropriate list of orders

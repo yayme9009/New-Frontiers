@@ -19,8 +19,7 @@ for planet in planets:
     for key,ind in planet.industries.items():
         ind.goods_init()
 
-
-for i in range(250):
+for i in range(1000):
     market(planets,techniques,len(labDict),len(goodsDict))
     #print(planets[0].industries[0].savings,planets[0].industries[1].savings,planets[0].industries[2].savings)
     #print(planets[0].industries[0].size, planets[0].industries[1].size, planets[0].industries[2].size)
