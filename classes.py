@@ -36,6 +36,9 @@ class planet:
         self.wages=[1]*lenlab
         self.prices=[1]*lengoods
 
+        self.lastWages=self.wages #last turn's wages
+        self.lastPrices=self.prices #last turn's prices
+
         self.labDemand=[0]*lenlab
         self.labSupply=[0]*lenlab #labour demand and supply lists for the planet
         self.labMoney=[0]*lenlab #amount of money buyers are putting up for each type of labour
@@ -141,10 +144,14 @@ class planet:
         #purges all the dead industries from the roll
         deadIndKeys=[]
         for key,ind in self.industries.items():
-            if (ind.savings<0.000001):
+            if (ind.savings<=0):
                 deadIndKeys.append(key)
+                if round(ind.savings)<-1:
+                    #really big negative
+                    print("\t",ind.savings, ind.income,ind.expenses,ind.constant,ind.expansion,ind.caplvl-ind.capital, ind.sizelvl-ind.size)
+                #print(ind.savings)
         for key in deadIndKeys:
-            self.investment+=self.industries[key].savings
+            self.investment+=min(0,self.industries[key].savings)
             del self.industries[key]
 
     def adjust_RandomFactor(self):
@@ -430,7 +437,7 @@ class industry:
                 #else, mixture of capital intensity and size expansion
                 sizeCapRatio=sizeCost/capitalCost #how expensive expanding by size is compared to capital
 
-                expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)*(self.size/(self.capital+0.1))) #higher means more extensive vs intensive investment
+                expandRatio=bound((0,1),0.5*(sizeCapRatio/5+1)*(profitpercent*5+1)*((self.capital/(self.size+0.1))*0.2+1)) #higher means more extensive vs intensive investment
                 #first sizeCapRatio measures how expensive it is to build capital instead of size
                 #then profit% modifies whether adding more space or intensity is profitable
 
@@ -485,7 +492,7 @@ class industry:
         # reset planning variables
         self.expansion = 0
         self.returned = 0
-        self.maintenance = 0
+        self.constant = 0
         self.labour = 0
 
     def use(self,prices):
@@ -512,9 +519,10 @@ class industry:
         remove_stock(self.stock,goodChange)
 
         expandCapital=max(0,(possibleCap)-(self.capital/100))
+        self.constant += min(possibleCap - expandCapital, self.capital / 100) * capitalCost
         self.capital+=expandCapital #add capital
         self.expansion+=expandCapital*capitalCost
-        self.constant+=min(possibleCap-expandCapital, self.capital/100)*capitalCost
+
 
         goodChange=[0]*len(self.stock)
         possibleSize=max(0,sizeDiff+math.pow(self.size/100,1.1))
@@ -526,9 +534,10 @@ class industry:
         remove_stock(self.stock,goodChange)
 
         expandSize=max(possibleSize-math.pow(self.size/100,1.1),0)
+        self.constant += min(possibleSize - expandSize, math.pow(self.size / 100, 1.1)) * sizeCost
         self.size+=expandSize #add size
         self.expansion+=expandSize*sizeCost
-        self.constant+=min(possibleSize-expandSize,math.pow(self.size/100,1.1))*sizeCost
+
 
         #here the industry uses up it's items, call the production function
         self.produce(prices)

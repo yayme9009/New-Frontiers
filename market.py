@@ -70,6 +70,9 @@ def market(planets,techDict,lenLab,lenGoods):
         maxWagePriceChange=0.5 #how fast the prices change
         minWage=0.0 #price floor
 
+        #update last turn prices
+        planets[i].lastWages=planets[i].wages.copy()
+
         for j in range(lenLab):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply or no demand, therefore -1
                 #max %age change in price 10%
@@ -97,7 +100,7 @@ def market(planets,techDict,lenLab,lenGoods):
 
         #production phase, uses stock of goods to generate goods for sale & prep for next phase
         for key,ind in planets[i].industries.items():
-            ind.use(planets[i].prices)
+            ind.use(planets[i].lastPrices)
 
             #selling goods produced
             planets[i].orders+=ind.sell()
@@ -157,6 +160,10 @@ def market(planets,techDict,lenLab,lenGoods):
 
         maxPriceChange=0.5
         minPrice=0.0
+
+        #update last turn's prices
+        planets[i].lastPrices=planets[i].prices.copy()
+
         for j in range(lenGoods):
             if demandFill[j]>1 or (demandFill[j]==-1): #oversupply
                 if demandFill[j]==-1:

@@ -191,8 +191,11 @@ def write_to_log(turnnum,planets,filepath="data\\log.csv"):
     companySize=0
     popSavings=0
     indSavings=0
+    GINI=0
     for planet in planets:
         money+=planet.investment
+
+        #GINI=calculate_GINI(planet.pops)
 
         for pop in planet.pops:
             population+=pop.population
@@ -281,4 +284,29 @@ def split_with_quotes(string):
 
     return returnlist
 
+def calculate_GINI(pops):
+    #given a pops list, this function will calculate their income inequality
+    incomes=[]
+    populations=[]
+    for pop in pops:
+        incomes.append(pop.income)
+        populations.append(pop.population)
+    #zip them together and sort by income
+    zipped=zip(incomes,populations)
+    sortedLists=sorted(zipped)
+    incomes = []
+    populations = []
+    for x,y in sortedLists:
+        incomes.append(x)
+        populations.append(y)
+    totalPop = sum(populations)
+    totalInc = sum(incomes)
 
+    incomeShare=incomes[0]/totalInc
+    popShare=populations[0]/totalPop
+    area=(incomes[0]/totalInc)*(populations[0]/totalPop)/2 #first pop add here
+
+    for i in range(1,len(pops)):
+        area+=incomeShare*popShare+((incomes[i]/totalInc)*(populations[i]/totalPop)/2)
+
+    return (0.5-area)/0.5
