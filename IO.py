@@ -79,7 +79,7 @@ def read_techniques(labourDict,goodsDict,filepath="scenario\\techniques.txt"):
             stage+=1 #new stage
         else:
             #first create new technique object
-            techniques[name]=technique(lab,inputGoods,inputAmounts,outputGoods,outputAmounts,capital,size)
+            techniques[name]=technique(name,lab,inputGoods,inputAmounts,outputGoods,outputAmounts,capital,size)
             #reset all technique variables
             name=""
             lab = 0
@@ -265,6 +265,27 @@ def write_goods(planets,filePath="data\\goods.csv"):
 
     file.write(writeString[:-1]+"\n")
     file.close()
+
+def write_time_header(filePath="data\\time.csv"):
+    #write runtime information
+    file=open(filePath,"w")
+    file.write("Factory Number, Runtime\n")
+    file.close()
+
+def write_time(runTime,times,lenIndustries,filePath="data\\time.csv"):
+    file=open(filePath,"a")
+    file.write(str(lenIndustries)+","+str(runTime)+",")
+    timeList=[times[0]]
+    for i in range(1,len(times)):
+        timeList.append(times[i]-times[i-1])
+    string=""
+    for timeNum in timeList:
+        string+=str(timeNum)+","
+    file.write(string[:-1]+"\n")
+    file.close()
+
+
+
 
 
 def split_with_quotes(string):

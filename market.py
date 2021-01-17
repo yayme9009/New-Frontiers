@@ -1,5 +1,6 @@
 #from classes import *
 from math import pow,e
+import time
 
 #for a typical market cycle, want to call labour market->.use()->.planning()->.sell()->.buy()->market transfers
 #don't forget to update planning variables
@@ -12,9 +13,13 @@ def market(planets,techDict,lenLab,lenGoods):
     #this function deals with the first turn of the market: the production cycle
 
 
+
     for i in range(len(planets)):
         #this loop deals with the production of labour
         #since labour markets are planet-specific, this is an easy target for parallelization, maybe split this off into it's own separate function
+
+        start = time.process_time_ns()
+        times=[]
 
         planets[i].orders=[] #clear any orders from previous turns
 
@@ -65,7 +70,6 @@ def market(planets,techDict,lenLab,lenGoods):
                         planets[i].industries[order.actorID].labour+=exp
 
 
-
         #change prices up or down
         maxWagePriceChange=0.5 #how fast the prices change
         minWage=0.0 #price floor
@@ -98,14 +102,20 @@ def market(planets,techDict,lenLab,lenGoods):
         planets[i].use_investment(techDict)
         planets[i].purge()
 
+        times.append(time.process_time_ns() - start)
+
+        planets[i].update_marketCache(techDict)
+        #print(planets[i].marketCache)
+
         #production phase, uses stock of goods to generate goods for sale & prep for next phase
         for key,ind in planets[i].industries.items():
             ind.use(planets[i].lastPrices)
 
             #selling goods produced
             planets[i].orders+=ind.sell()
-            planets[i].orders+=ind.planning(planets[i].wages,planets[i].prices)
+            planets[i].orders+=ind.planning(planets[i].marketCache)
 
+        times.append(time.process_time_ns() - start)
 
         #goods market phase, sell goods to planetary market, split the market resolution into it's own function? TODO: split the market cycle into their own functions
         #get consumer demands as well
@@ -150,8 +160,8 @@ def market(planets,techDict,lenLab,lenGoods):
                         goodsBought=order.amount * min(1, demandFill[order.goodID])
                         planets[i].industries[order.actorID].stock[order.goodID] += goodsBought
 
-                        if planets[i].industries[order.actorID].savings<0:
-                            print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
+                        #if planets[i].industries[order.actorID].savings<0:
+                        #    print(planets[i].industries[order.actorID].savings, planets[i].industries[order.actorID].savings+exp)
 
                         exp = planets[i].prices[order.goodID] * goodsBought
                         planets[i].industries[order.actorID].savings -= exp
@@ -178,6 +188,7 @@ def market(planets,techDict,lenLab,lenGoods):
                     pricePercentChange = (0.1) / (1 + pow(e, -(1 / demandFill[j] - 1) / 2))
                     planets[i].prices[j]+=max(maxPriceChange*pricePercentChange,planets[i].prices[j]*pricePercentChange)
 
+
         #now pops use the stock they've bought
         for j in range(len(planets[i].pops)):
             planets[i].pops[j].use_stock()
@@ -186,8 +197,12 @@ def market(planets,techDict,lenLab,lenGoods):
         #here pops invest in planet
         planets[i].get_investment()
         planets[i].adjust_RandomFactor()
-        #for pop in planets[i].pops:
-        #    pop.grow()
+        for pop in planets[i].pops:
+            pop.grow()
+
+        times.append(time.process_time_ns() - start)
+
+        return times
 
 
 def demand_supply(orders,lenprices):

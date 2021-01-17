@@ -31,10 +31,13 @@ class planet:
         self.dividend=0 #amount of money that can be split
         self.investment=0 #amount of money each pop class has invested in planet's industries
 
+        #market cache vars
+        self.marketCache={} #dictionary with names as keys and list of [wagecost,cost,capitalCost,sizeCost] as values
+
         #market lists
         self.orders=[] #list of orders the planet has, essentially the planet's market
-        self.wages=[1]*lenlab
-        self.prices=[1]*lengoods
+        self.wages=[1.0]*lenlab
+        self.prices=[1.0]*lengoods
 
         self.lastWages=self.wages #last turn's wages
         self.lastPrices=self.prices #last turn's prices
@@ -144,7 +147,7 @@ class planet:
         #purges all the dead industries from the roll
         deadIndKeys=[]
         for key,ind in self.industries.items():
-            if (ind.savings<=0):
+            if (ind.savings<=0)or(ind.size<=0):
                 deadIndKeys.append(key)
                 if round(ind.savings)<-1:
                     #really big negative
@@ -156,10 +159,15 @@ class planet:
 
     def adjust_RandomFactor(self):
         random.seed()
-        num=random.randint(0,49)
+        num=int(50*random.random())
         for key,ind in self.industries.items():
             if num%50==ind.randInterval:
                 ind.randFactor=bound((0.5,1.5),random.gauss(1,0.15))
+
+    def update_marketCache(self,techDict):
+        #updates cache of technique costs (unit cost, capital cost, size cost)
+        for key,prod in techDict.items():
+            self.marketCache[key]=[self.wages[prod.labour],prod.costs(self.wages,self.prices),price_list(prod.capitalUnit,self.prices),price_list(prod.sizeUnit,self.prices)]
 
 class pop:
     def __init__(self,i,ptype,popln,s,need):
@@ -273,7 +281,7 @@ class industry:
         #economic planning variables
         random.seed()
         self.randFactor=1 #set it up as 1 to start with to avoid weird economy crashes with only one industry
-        self.randInterval=random.randint(0,49) #how long to change randFactor
+        self.randInterval=int(50*random.random()) #how long to change randFactor
 
         self.new=0 #if >0, prevents giving out dividends
 
@@ -315,7 +323,7 @@ class industry:
         self.expenses=price_list(self.stock,[1]*len(self.stock))
         self.income=self.expenses #needed to avoid planning wonkiness
 
-    def planning(self,labprices,prices):
+    def planning(self,marketCache):
         #planning function that sets levels of production for the next turn, returns a list of goods to buy
         #should set prodplanlvl, caplvl and sizelvl
         profitpercent=(self.income-self.expenses+self.expansion+self.returned)/(self.expenses-self.expansion-self.returned) #this measure is intended to be a measure of the profitability of the company, so expansion costs and debt repayments are excluded
@@ -324,18 +332,17 @@ class industry:
 
         budget=self.savings
 
-        unitCost=self.production.costs(labprices,prices)
-
-        #remember the following cost variables represent the cost of adding 10 of each
-        capitalCost = price_list(self.production.capitalUnit, prices) #maintaincost is 1/10th capitalCost
-        sizeCost=price_list(self.production.sizeUnit,prices)
+        #get costs of various operations
+        [wageCost,unitCost,capitalCost,sizeCost]=marketCache[self.production.name]
 
         orders=[]
+        #cache price length
+        lenPrices=len(self.stock)
 
         maintainBudget=0.8*budget #don't spend more than 80% of budget on maintenance
 
         # maintenance of capital, each capital costs 1/10th the goods needed to build it
-        maintenanceCost=self.capital / 100 * capitalCost+math.pow(self.size/100,1.1) * sizeCost
+        maintenanceCost=self.capital / 100 * capitalCost+(self.size/100)**1.1 * sizeCost
         maintainPercent=min(1.0,maintainBudget/maintenanceCost)
 
         sizeCut=False
@@ -350,17 +357,8 @@ class industry:
 
         maintenanceCost*=maintainPercent
 
-        orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent for i in range(len(self.production.capitalUnit))],self.id,False,True,1)+list_to_order([self.production.sizeUnit[i]*maintainPercent for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
-
-        '''
-        if maintenanceCost>budget:
-            #kill expansion plans
-            self.reset_planning_vars()
-
-            self.caplvl = self.capital
-            self.sizelvl = self.size
-            return orders
-        '''
+        orders+=list_to_order([self.production.capitalUnit[i]*maintainPercent for i in range(len(self.production.capitalUnit))],self.id,False,True,1)
+        orders+=list_to_order([self.production.sizeUnit[i]*maintainPercent for i in range(len(self.production.sizeUnit))],self.id,False,True,1)
 
         budget-=maintenanceCost #if couldn't afford maintenance would've already returned, maybe should think about letting industry decay
 
@@ -369,38 +367,17 @@ class industry:
         random.seed()
         randomProdFactor=random.uniform(0.95,1.05) #range of 10 percentage points, modifies level set
 
-        try:
+        canAfford=budget/unitCost
 
-            canAfford=budget/unitCost
-
-            if profitpercent>0:
-                self.prodPlanLvl = min(canAfford,self.size * (randomProdFactor-0.05))
-            else:
-                self.prodPlanLvl = min(canAfford,self.size * 1/(1+math.pow(math.e,-0.5*(profitpercent+0.5))) * randomProdFactor)
-
-        except ZeroDivisionError: #no good inputs
-            if profitpercent>0:
-                self.prodPlanLvl = self.size * (randomProdFactor-0.05)
-            else:
-                self.prodPlanLvl = self.size * 1/(1+math.pow(math.e,-0.5*(profitpercent+0.5))) * randomProdFactor
-
-
-
-        '''
-        if profitpercent<0:
-            #if this production is losing money
-            self.prodPlanLvl=min(canAfford,randomProdFactor*self.prodPlanLvl*(1+max(-0.9,(profitpercent)))) #maximum production cut from turn to turn is 90%
-
-            budget-=self.prodPlanLvl*unitCost
-
+        if profitpercent>0:
+            self.prodPlanLvl = min(canAfford,self.size * (randomProdFactor-0.05))
         else:
-            self.prodPlanLvl=min(self.size, randomProdFactor*self.prodActLvl*(1+max(1,profitpercent)), canAfford)
-            budget-=self.prodPlanLvl*unitCost
-        '''
+
+            self.prodPlanLvl = min(canAfford,self.size * logistic_curve(1,0.5,-0.5,profitpercent) * randomProdFactor)
 
         #add goods from prodPlanLvl to order list
         #buying of labour is already handled in buy_labour() function
-        buylist=[0]*len(prices)
+        buylist=[0]*lenPrices
         for i in range(len(self.production.inGoods)):
             buylist[self.production.inGoods[i]]+=self.prodPlanLvl*self.production.inAmts[i]
 
@@ -410,7 +387,9 @@ class industry:
 
         budget -= productionBudget
 
-        self.planLabCost=productionBudget-price_list(buylist,prices) #amount earmarked for labour next round, avoid giving away in dividends
+        #self.planLabCost=productionBudget-price_list(buylist,prices) #amount earmarked for labour next round, avoid giving away in dividends
+
+        self.planLabCost=self.prodPlanLvl*wageCost
 
         #keep a reserve of half last turns operating expenses, modified by the profit% they had last turn
 
@@ -452,8 +431,8 @@ class industry:
 
             expansionBudget=capDiff*capitalCost+sizeDiff*sizeCost
 
-            orders+=list_to_order([self.production.capitalUnit[i]*capDiff for i in range(len(prices))],self.id,False,True,1)
-            orders+=list_to_order([self.production.sizeUnit[i]*sizeDiff for i in range(len(prices))],self.id,False,True,1)
+            orders+=list_to_order([self.production.capitalUnit[i]*capDiff for i in range(lenPrices)],self.id,False,True,1)
+            orders+=list_to_order([self.production.sizeUnit[i]*sizeDiff for i in range(lenPrices)],self.id,False,True,1)
 
         else:
             #no money for expansion, set up flag for a loan if profitable, bank will reject if enterprise losing money
@@ -507,7 +486,6 @@ class industry:
 
         #add to industry size and level of capital
 
-        goodChange=[0]*len(self.stock)
         possibleCap=max(0,capDiff+(self.capital/100)) #possible units of capital goods that can be added with correction factor for maintenance
 
         #if capDiff>0:
@@ -523,9 +501,9 @@ class industry:
         self.capital+=expandCapital #add capital
         self.expansion+=expandCapital*capitalCost
 
+        maintainSizeUnits=self.size/100**1.1 #cache this function
 
-        goodChange=[0]*len(self.stock)
-        possibleSize=max(0,sizeDiff+math.pow(self.size/100,1.1))
+        possibleSize=max(0,sizeDiff+maintainSizeUnits)
         for i in range(len(self.production.sizeUnit)):
             if self.production.sizeUnit[i]!=0:
                 possibleSize=min(possibleSize,self.stock[i]/self.production.sizeUnit[i])
@@ -533,8 +511,8 @@ class industry:
         goodChange=[possibleSize*x for x in self.production.sizeUnit]
         remove_stock(self.stock,goodChange)
 
-        expandSize=max(possibleSize-math.pow(self.size/100,1.1),0)
-        self.constant += min(possibleSize - expandSize, math.pow(self.size / 100, 1.1)) * sizeCost
+        expandSize=max(possibleSize-maintainSizeUnits,0)
+        self.constant += min(possibleSize - expandSize, maintainSizeUnits) * sizeCost
         self.size+=expandSize #add size
         self.expansion+=expandSize*sizeCost
 
@@ -547,9 +525,9 @@ class industry:
             self.capital-=max(1,self.capital*(expandCapital/(self.capital/100))/2) #maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
         self.capital=max(self.capital,0)
 
-        if expandSize<(math.pow(self.size/100,1.1)):
+        if expandSize<(maintainSizeUnits):
             #self.size -= max(1, self.size * (expandSize / (math.pow(self.size/100,1.1))) / 2)  # maybe should have %age scaling factor that increases the longer the factory failed to maintain it's capital
-            self.size -= self.size * (expandSize / (math.pow(self.size / 100, 1.1))) / 2
+            self.size -= self.size * (expandSize / (maintainSizeUnits)) / 2
         self.size = max(self.size, 0)
 
 
@@ -640,7 +618,8 @@ class sellOrder(order):
 
 class technique:
     #defines a production technique industries use to produce goods
-    def __init__(self,lab,inputGoods,inputAmts,outputGoods,outputAmts,cap,size):
+    def __init__(self,name,lab,inputGoods,inputAmts,outputGoods,outputAmts,cap,size):
+        self.name=name
         self.labour=lab #the labour type this technique needs
 
         self.inGoods=inputGoods #list of input goods in order
@@ -878,3 +857,7 @@ def generate_id():
     #generates a new unique ID
     random.seed()
     return random.random()
+
+def logistic_curve(L,k,xo,x):
+    #implementation of the logistic curve function
+    return L/(1+((math.e)**(-k*(x-xo))))
